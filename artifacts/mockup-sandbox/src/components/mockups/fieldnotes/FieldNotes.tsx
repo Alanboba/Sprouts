@@ -176,7 +176,6 @@ export default function FieldNotes() {
           <div className="fieldnotes-content fn-connect-view">
             <header className="fn-connect-header">
               <button className="fn-back-button" onClick={() => setScreen("plant")} aria-label="Back to Milo’s plant page"><Icon name="arrow" size={17} /></button>
-              <span className="fn-eyebrow"><span className="fn-eyebrow-mark" /> Optional hardware</span>
             </header>
             <div>
               <div className="fn-section-kicker">The instrument desk <span>·</span> 01</div>
