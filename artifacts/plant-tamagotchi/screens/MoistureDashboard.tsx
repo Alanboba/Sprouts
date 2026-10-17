@@ -2,14 +2,13 @@ import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import { usePlantCare } from '@/context/PlantCareContext';
+import { DAY_MS, getNextCheckAt } from '@/context/plant-care-schedule';
 import { usePlantPhoto } from '@/hooks/usePlantPhoto';
 import { useColors } from '@/hooks/useColors';
 import { usePlantIdentity } from '@/context/PlantIdentityContext';
 import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState } from 'react';
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 function dateLabel(timestamp: number | null, includeTime = false) {
   if (!timestamp) return 'Not recorded yet';
@@ -21,10 +20,17 @@ function dateLabel(timestamp: number | null, includeTime = false) {
 export default function MoistureDashboard() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { isReady, lastWateredAt, lastSoilCheckAt, sensorHost, sensorConnected, moisturePercent,
-    lastReadingAt, nextCheckAt, refreshSensor, logWatering, logSoilCheck } = usePlantCare();
+  const { isReady: sensorReady, sensorHost, sensorConnected, moisturePercent,
+    lastReadingAt, refreshSensor } = usePlantCare();
   const { photoUri, isLoading: photoLoading, isSaving: photoSaving, error: photoError, pickPhoto, removePhoto } = usePlantPhoto();
-  const { identity } = usePlantIdentity();
+  const { identity, plants, isReady: plantsReady, error: plantsError,
+    selectPlant, logWatering, logSoilCheck } = usePlantIdentity();
+  const isReady = sensorReady && plantsReady;
+  const lastWateredAt = identity?.lastWateredAt ?? null;
+  const lastSoilCheckAt = identity?.lastSoilCheckAt ?? null;
+  const nextCheckAt = identity
+    ? getNextCheckAt(identity.lastWateredAt, identity.lastSoilCheckAt)
+    : 0;
   const [sensorLoading, setSensorLoading] = useState(false);
   const [sensorError, setSensorError] = useState<string | null>(null);
   const [careFeedback, setCareFeedback] = useState<string | null>(null);
@@ -44,6 +50,17 @@ export default function MoistureDashboard() {
     connectLabel: { color: colors.secondaryForeground, fontFamily: 'DMSans_600SemiBold', fontSize: 12 },
     identifyAction: { minHeight: 44, paddingHorizontal: 13, borderRadius: 12, backgroundColor: colors.secondary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
     identifyActionText: { color: colors.secondaryForeground, fontFamily: 'DMSans_600SemiBold', fontSize: 12 },
+    profileChooser: { gap: 9 },
+    profileHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    profileLabel: { color: colors.mutedForeground, fontFamily: 'DMSans_600SemiBold', fontSize: 11, letterSpacing: 0.4 },
+    addPlant: { minHeight: 34, paddingHorizontal: 10, borderRadius: 10, backgroundColor: colors.secondary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 },
+    addPlantText: { color: colors.secondaryForeground, fontFamily: 'DMSans_600SemiBold', fontSize: 11 },
+    profileChips: { flexDirection: 'row', gap: 8, paddingRight: 6 },
+    profileChip: { minHeight: 38, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+    profileChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+    profileChipText: { color: colors.foreground, fontFamily: 'DMSans_600SemiBold', fontSize: 12 },
+    profileChipTextActive: { color: colors.primaryForeground },
+    profileNote: { color: colors.mutedForeground, fontFamily: 'DMSans_400Regular', fontSize: 11, lineHeight: 16 },
     photoCard: { minHeight: 102, flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card },
     photo: { width: 76, height: 76, borderRadius: 12, backgroundColor: colors.muted },
     photoEmpty: { width: 76, height: 76, borderRadius: 12, backgroundColor: colors.secondary, alignItems: 'center', justifyContent: 'center' },
@@ -89,8 +106,8 @@ export default function MoistureDashboard() {
   });
 
   const now = Date.now();
-  const daysUntilCheck = Math.max(0, Math.ceil((nextCheckAt - now) / DAY_MS));
-  const checkDue = nextCheckAt <= now;
+  const daysUntilCheck = identity ? Math.max(0, Math.ceil((nextCheckAt - now) / DAY_MS)) : 0;
+  const checkDue = Boolean(identity && nextCheckAt <= now);
   const hasReading = moisturePercent !== null;
   const moistureColor = !sensorConnected ? colors.mutedForeground
     : moisturePercent !== null && moisturePercent < 35 ? colors.destructive
@@ -118,15 +135,31 @@ export default function MoistureDashboard() {
     }
   };
 
-  const handleWater = () => {
-    logWatering();
-    setCareFeedback('Watering logged. Your next soil check is in 7 days.');
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  const handleWater = async () => {
+    try {
+      await logWatering();
+      setCareFeedback(`Watering logged for ${identity?.commonName ?? 'this plant'}.`);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch {
+      setCareFeedback('Could not save the watering log. Please try again.');
+    }
   };
-  const handleSoilCheck = () => {
-    logSoilCheck();
-    setCareFeedback('Damp soil check logged. Check again in 2 days.');
-    void Haptics.selectionAsync();
+  const handleSoilCheck = async () => {
+    try {
+      await logSoilCheck();
+      setCareFeedback(`Soil check logged for ${identity?.commonName ?? 'this plant'}.`);
+      void Haptics.selectionAsync();
+    } catch {
+      setCareFeedback('Could not save the soil check. Please try again.');
+    }
+  };
+  const handleSelectPlant = async (plantId: string) => {
+    try {
+      await selectPlant(plantId);
+      setCareFeedback(null);
+    } catch {
+      setCareFeedback('Could not switch plants. Please try again.');
+    }
   };
 
   const photoBusy = photoLoading || photoSaving;
@@ -137,13 +170,71 @@ export default function MoistureDashboard() {
         <View style={styles.header}>
           <View>
             <Text style={styles.title}>Plant care</Text>
-            <Text style={styles.subtitle}>Milo · {identity?.commonName ?? 'Pothos'}</Text>
+            <Text style={styles.subtitle}>
+              {identity ? `Name · ${identity.commonName}` : 'Loading plants…'}
+            </Text>
           </View>
           <Pressable accessibilityRole="button" accessibilityLabel="Open sensor connection settings"
             onPress={() => router.push('/connect')} style={({ pressed }) => [styles.connect, { opacity: pressed ? 0.75 : 1 }]} testID="open-connect">
             <Feather name={sensorConnected ? 'wifi' : 'wifi-off'} size={15} color={colors.secondaryForeground} />
             <Text style={styles.connectLabel}>{sensorConnected ? 'Connected' : 'Connect sensor'}</Text>
           </Pressable>
+        </View>
+
+        <View style={styles.profileChooser}>
+          <View style={styles.profileHeading}>
+            <Text style={styles.profileLabel}>YOUR PLANTS</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Add another plant"
+              disabled={!plantsReady}
+              onPress={() => router.push('/add-plant')}
+              style={({ pressed }) => [
+                styles.addPlant,
+                { opacity: !plantsReady || pressed ? 0.6 : 1 },
+              ]}
+              testID="add-another-plant"
+            >
+              <Feather name="plus" size={15} color={colors.secondaryForeground} />
+              <Text style={styles.addPlantText}>Add plant</Text>
+            </Pressable>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.profileChips}
+            accessibilityLabel="Your saved plants"
+          >
+            {plants.map((plant) => {
+              const selected = plant.id === identity?.id;
+              return (
+                <Pressable
+                  key={plant.id}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected }}
+                  accessibilityLabel={`${plant.commonName}${selected ? ', selected' : ''}`}
+                  onPress={() => void handleSelectPlant(plant.id)}
+                  style={({ pressed }) => [
+                    styles.profileChip,
+                    selected ? styles.profileChipActive : null,
+                    { opacity: pressed ? 0.72 : 1 },
+                  ]}
+                  testID={`plant-profile-${plant.id}`}
+                >
+                  <Text style={[styles.profileChipText, selected ? styles.profileChipTextActive : null]}>
+                    {plant.commonName}
+                  </Text>
+                  {selected ? <Feather name="check" size={13} color={colors.primaryForeground} /> : null}
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+          {plants.length > 1 ? (
+            <Text style={styles.profileNote}>
+              Each plant has its own photo and care log. The connected moisture sensor is shared.
+            </Text>
+          ) : null}
+          {plantsError ? <Text style={styles.errorText} accessibilityRole="alert">{plantsError}</Text> : null}
         </View>
 
         <View style={styles.photoCard}>
@@ -183,7 +274,7 @@ export default function MoistureDashboard() {
         </View>
         {photoError ? <Text style={styles.errorText} accessibilityRole="alert">{photoError}</Text> : null}
 
-        <Pressable accessibilityRole="button" accessibilityLabel="Identify Milo's plant from a photo"
+        <Pressable accessibilityRole="button" accessibilityLabel={`Identify ${identity?.commonName ?? 'this plant'} from a photo`}
           onPress={() => router.push('/identify')}
           style={({ pressed }) => [styles.identifyAction, { opacity: pressed ? 0.75 : 1 }]}
           testID="identify-plant">
@@ -240,10 +331,10 @@ export default function MoistureDashboard() {
           </Text>
           <Text style={styles.guidanceBody}>
             {sensorConnected && moisturePercent !== null && moisturePercent < 35
-              ? 'Water slowly until a little drains from the pot. Empty the saucer afterward.'
+              ? 'The sensor reads low moisture. Check this plant’s soil and care needs before watering.'
               : sensorConnected && moisturePercent !== null && moisturePercent >= 70
-                ? 'Skip watering for now. Pothos prefer the top inch of soil to dry between drinks.'
-                : 'Pothos prefer the top inch of soil to dry between drinks. When in doubt, check before watering.'}
+                ? 'The sensor reads high moisture. Hold off and check this plant again later.'
+                : 'Watering needs vary by plant. Check the soil before watering, and wait if it still feels damp.'}
           </Text>
         </View>
 
@@ -253,11 +344,11 @@ export default function MoistureDashboard() {
         </View>
         {lastSoilCheckAt ? <Text style={styles.readingMeta}>Last soil check · {dateLabel(lastSoilCheckAt)}</Text> : null}
         <View style={styles.careActions}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Log that you watered Milo" disabled={!isReady}
+          <Pressable accessibilityRole="button" accessibilityLabel={`Log that you watered ${identity?.commonName ?? 'this plant'}`} disabled={!isReady || !identity}
             onPress={handleWater} style={({ pressed }) => [styles.primaryAction, { opacity: !isReady || pressed ? 0.65 : 1 }]} testID="log-watering">
             <Feather name="droplet" size={16} color={colors.primaryForeground} /><Text style={styles.primaryActionText}>Log watering</Text>
           </Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel="Log that soil is still damp" disabled={!isReady}
+          <Pressable accessibilityRole="button" accessibilityLabel={`Log that ${identity?.commonName ?? 'this plant'} soil is still damp`} disabled={!isReady || !identity}
             onPress={handleSoilCheck} style={({ pressed }) => [styles.secondaryAction, { opacity: !isReady || pressed ? 0.65 : 1 }]} testID="log-soil-check">
             <Feather name="check-circle" size={16} color={colors.primary} /><Text style={styles.secondaryActionText}>Still damp</Text>
           </Pressable>

@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { DAY_MS, DEFAULT_CHECK_INTERVAL_DAYS, getNextCheckAt } from './plant-care-schedule';
 import React, {
   createContext,
   useContext,
@@ -9,9 +10,6 @@ import React, {
 } from 'react';
 
 const STORAGE_KEY = 'plant-pal-care-v1';
-const DAY_MS = 24 * 60 * 60 * 1000;
-const DEFAULT_CHECK_INTERVAL_DAYS = 7;
-const DAMP_SOIL_RECHECK_DAYS = 2;
 
 interface PlantCareState {
   lastWateredAt: number;
@@ -44,13 +42,6 @@ function makeInitialState(): PlantCareState {
     moisturePercent: null,
     lastReadingAt: null,
   };
-}
-
-function getNextCheckAt(state: PlantCareState): number {
-  if (state.lastSoilCheckAt && state.lastSoilCheckAt > state.lastWateredAt) {
-    return state.lastSoilCheckAt + DAMP_SOIL_RECHECK_DAYS * DAY_MS;
-  }
-  return state.lastWateredAt + DEFAULT_CHECK_INTERVAL_DAYS * DAY_MS;
 }
 
 function normalizeHost(value: string): string {
@@ -180,7 +171,7 @@ export function PlantCareProvider({ children }: { children: ReactNode }) {
     setData((previous) => ({ ...previous, lastSoilCheckAt: Date.now() }));
   };
 
-  const nextCheckAt = getNextCheckAt(data);
+  const nextCheckAt = getNextCheckAt(data.lastWateredAt, data.lastSoilCheckAt);
   const value = useMemo(
     () => ({
       ...data,

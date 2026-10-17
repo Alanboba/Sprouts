@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { usePlantIdentity } from '@/context/PlantIdentityContext';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -20,6 +21,11 @@ interface PlantPhotoValue {
 const PlantPhotoContext = createContext<PlantPhotoValue | null>(null);
 
 export function PlantPhotoProvider({ children }: { children: ReactNode }) {
+  const { identity } = usePlantIdentity();
+  const photoKey =
+    identity?.id && identity.id !== 'plant-default'
+      ? `${PHOTO_KEY}:${identity.id}`
+      : PHOTO_KEY;
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -28,7 +34,10 @@ export function PlantPhotoProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
-    AsyncStorage.getItem(PHOTO_KEY)
+    setPhotoUri(null);
+    setIsLoading(true);
+    setError(null);
+    AsyncStorage.getItem(photoKey)
       .then((saved) => {
         if (!mounted || !saved) return;
         if (!saved.startsWith('data:image/jpeg;base64,')) {
@@ -47,7 +56,7 @@ export function PlantPhotoProvider({ children }: { children: ReactNode }) {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [photoKey]);
 
   const pickPhoto = useCallback(async (source: PlantPhotoSource = 'library') => {
     if (busy.current || isLoading) return;
@@ -111,7 +120,7 @@ export function PlantPhotoProvider({ children }: { children: ReactNode }) {
       }
       // Commit before changing the preview. A failed replace keeps the old photo.
       try {
-        await AsyncStorage.setItem(PHOTO_KEY, uri);
+        await AsyncStorage.setItem(photoKey, uri);
       } catch {
         throw new Error('Could not save the photo on this device. Free some space and try again.');
       }
@@ -126,7 +135,7 @@ export function PlantPhotoProvider({ children }: { children: ReactNode }) {
       busy.current = false;
       setIsSaving(false);
     }
-  }, [isLoading]);
+  }, [isLoading, photoKey]);
 
   const removePhoto = useCallback(async () => {
     if (busy.current || isLoading) return;
@@ -134,7 +143,7 @@ export function PlantPhotoProvider({ children }: { children: ReactNode }) {
     setIsSaving(true);
     setError(null);
     try {
-      await AsyncStorage.removeItem(PHOTO_KEY);
+      await AsyncStorage.removeItem(photoKey);
       setPhotoUri(null);
     } catch {
       setError('Could not remove the photo. Please try again.');
@@ -142,7 +151,7 @@ export function PlantPhotoProvider({ children }: { children: ReactNode }) {
       busy.current = false;
       setIsSaving(false);
     }
-  }, [isLoading]);
+  }, [isLoading, photoKey]);
 
   const value = useMemo(
     () => ({ photoUri, isLoading, isSaving, error, pickPhoto, removePhoto }),
