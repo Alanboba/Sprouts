@@ -15,7 +15,7 @@
     "ios": {
       "supportsTablet": false,
       "infoPlist": {
-        "NSLocalNetworkUsageDescription": "Plant Pal connects to your soil sensor on your home Wi-Fi network.",
+        "NSLocalNetworkUsageDescription": "Sprout connects to your soil sensor on your home Wi-Fi network.",
         "NSAppTransportSecurity": {
           "NSAllowsLocalNetworking": true
         }
@@ -34,8 +34,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Choose a photo of your plant for your Plant Pal dashboard.",
-          "cameraPermission": "Allow Plant Pal to take a photo of your plant.",
+          "photosPermission": "Choose a photo of your plant for your Sprout dashboard.",
+          "cameraPermission": "Allow Sprout to take a photo of your plant.",
           "microphonePermission": false
         }
       ]

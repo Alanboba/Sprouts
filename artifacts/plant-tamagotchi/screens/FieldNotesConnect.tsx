@@ -106,7 +106,7 @@ export default function FieldNotesConnect() {
           ) : null}
           <View style={styles.divider} />
           <Text style={styles.sectionTitle}>Set up your board</Text>
-          <Text style={styles.setupBody}>Upload the PlantPalESP32.ino sketch from Arduino IDE before connecting here.</Text>
+          <Text style={styles.setupBody}>Upload the SproutESP32.ino sketch from Arduino IDE before connecting here.</Text>
           <View style={styles.steps}>
             <View style={styles.step}><View style={styles.stepMark} /><Text style={styles.stepText}>Wire a capacitive moisture sensor to GPIO 34 and connect ground.</Text></View>
             <View style={styles.step}><View style={styles.stepMark} /><Text style={styles.stepText}>Enter your Wi-Fi details in the sketch and upload it to the ESP32.</Text></View>

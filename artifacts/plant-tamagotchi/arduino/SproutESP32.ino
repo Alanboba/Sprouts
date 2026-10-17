@@ -42,12 +42,12 @@ void setup() {
     Serial.print(".");
   }
   Serial.println();
-  Serial.print("Plant Pal address: http://");
+  Serial.print("Sprout address: http://");
   Serial.println(WiFi.localIP());
 
   server.on("/api/status", HTTP_GET, handleStatus);
   server.begin();
-  Serial.println("Plant Pal sensor ready.");
+  Serial.println("Sprout sensor ready.");
 }
 
 void loop() {
