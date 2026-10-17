@@ -1,0 +1,1 @@
+- [Plant Pal product focus](plant-pal-product-focus.md) — prioritize moisture and user photos over ornamental journal styling; photos are device-local unless scope changes.

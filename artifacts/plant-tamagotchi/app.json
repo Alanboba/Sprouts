@@ -8,7 +8,7 @@
     "scheme": "sprout",
     "userInterfaceStyle": "automatic",
     "splash": {
-      "backgroundColor": "#F5EFDF",
+      "backgroundColor": "#F2F5EF",
       "image": "./assets/images/icon.png",
       "resizeMode": "contain"
     },
@@ -30,7 +30,15 @@
       "favicon": "./assets/images/icon.png"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Choose a photo of your plant for your Plant Pal dashboard.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

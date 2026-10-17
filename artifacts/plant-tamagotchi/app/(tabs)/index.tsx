@@ -1,1 +1,1 @@
-export { default } from '@/screens/FieldNotesHome';
+export { default } from '@/screens/MoistureDashboard';

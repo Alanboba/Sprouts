@@ -16,9 +16,9 @@ function NativeTabLayout() {
     <NativeTabs>
       <NativeTabs.Trigger name="index">
         <NativeTabs.Trigger.Icon
-          sf={{ default: 'leaf', selected: 'leaf.fill' }}
+          sf={{ default: 'square.grid.2x2', selected: 'square.grid.2x2.fill' }}
         />
-        <NativeTabs.Trigger.Label>Plant</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Label>Dashboard</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="connect">
         <NativeTabs.Trigger.Icon
@@ -72,13 +72,12 @@ function ClassicTabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Plant',
-          tabBarActiveBackgroundColor: colors.secondary,
+          title: 'Dashboard',
           tabBarIcon: ({ color }) =>
             isIOS ? (
-              <SymbolView name="leaf" tintColor={color} size={24} />
+              <SymbolView name="square.grid.2x2" tintColor={color} size={24} />
             ) : (
-              <Feather name="feather" size={22} color={color} />
+              <Feather name="grid" size={22} color={color} />
             ),
         }}
       />
@@ -86,7 +85,6 @@ function ClassicTabLayout() {
         name="connect"
         options={{
           title: 'Connect',
-          tabBarActiveBackgroundColor: colors.secondary,
           tabBarIcon: ({ color }) =>
             isIOS ? (
               <SymbolView name="wifi" tintColor={color} size={24} />
