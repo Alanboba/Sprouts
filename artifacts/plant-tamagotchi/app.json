@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "Plant Pal",
-    "slug": "plant-tamagotchi",
+    "name": "sprout",
+    "slug": "sprout",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "plant-tamagotchi",
+    "scheme": "sprout",
     "userInterfaceStyle": "automatic",
     "splash": {
       "backgroundColor": "#F4F5EC",
@@ -19,15 +19,19 @@
         "NSAppTransportSecurity": {
           "NSAllowsLocalNetworking": true
         }
-      }
+      },
+      "bundleIdentifier": "com.sprout.app"
     },
     "android": {
-      "usesCleartextTraffic": true
+      "usesCleartextTraffic": true,
+      "package": "com.sprout.app"
     },
     "web": {
       "favicon": "./assets/images/icon.png"
     },
-    "plugins": ["expo-router"],
+    "plugins": [
+      "expo-router"
+    ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
