@@ -35,7 +35,7 @@
         "expo-image-picker",
         {
           "photosPermission": "Choose a photo of your plant for your Plant Pal dashboard.",
-          "cameraPermission": false,
+          "cameraPermission": "Allow Plant Pal to take a photo of your plant.",
           "microphonePermission": false
         }
       ]

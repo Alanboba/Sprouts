@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: plants
+    description: Plant identification
 paths:
   /healthz:
     get:
@@ -24,6 +26,55 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /plants/identify:
+    post:
+      operationId: identifyPlant
+      tags: [plants]
+      summary: Identify a plant from a photo
+      description: Uses Gemini to conservatively identify a plant photo. Images are processed in memory and are not saved by the API.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlantIdentificationInput"
+      responses:
+        "200":
+          description: Identification result or a request for a clearer image
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlantIdentificationResult"
+        "400":
+          description: Invalid image or request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "413":
+          description: Image exceeds the request limit
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "429":
+          description: Too many identification requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "502":
+          description: Gemini returned an unusable response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: Gemini is not configured or temporarily unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +84,43 @@ components:
           type: string
       required:
         - status
+    PlantIdentificationInput:
+      type: object
+      additionalProperties: false
+      properties:
+        imageBase64:
+          type: string
+          minLength: 40
+          maxLength: 2000000
+          description: Base64-encoded JPEG, PNG, or WebP image bytes (without a data URL prefix).
+        mimeType:
+          type: string
+          enum: [image/jpeg, image/png, image/webp]
+      required: [imageBase64, mimeType]
+    PlantIdentificationResult:
+      type: object
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum: [identified, uncertain, not_plant]
+        commonName:
+          type: string
+        scientificName:
+          type: string
+        confidence:
+          type: ["number", "null"]
+          minimum: 0
+          maximum: 1
+          description: Gemini's estimated confidence (0 to 1); null when no estimate is available.
+        message:
+          type: string
+      required: [status, commonName, scientificName, confidence, message]
+    ApiError:
+      type: object
+      additionalProperties: false
+      properties:
+        error:
+          type: string
+      required: [error]
 

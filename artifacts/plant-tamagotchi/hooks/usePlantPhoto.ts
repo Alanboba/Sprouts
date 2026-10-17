@@ -1,13 +1,25 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 // Keep photos separate from care records so replacing a photo never resets care.
 const PHOTO_KEY = 'plant-pal-photo-v1';
 const MAX_STORED_LENGTH = 1_500_000;
+export type PlantPhotoSource = 'library' | 'camera';
 
-export function usePlantPhoto() {
+interface PlantPhotoValue {
+  photoUri: string | null;
+  isLoading: boolean;
+  isSaving: boolean;
+  error: string | null;
+  pickPhoto: (source?: PlantPhotoSource) => Promise<void>;
+  removePhoto: () => Promise<void>;
+}
+
+const PlantPhotoContext = createContext<PlantPhotoValue | null>(null);
+
+export function PlantPhotoProvider({ children }: { children: ReactNode }) {
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -37,7 +49,7 @@ export function usePlantPhoto() {
     };
   }, []);
 
-  const pickPhoto = useCallback(async () => {
+  const pickPhoto = useCallback(async (source: PlantPhotoSource = 'library') => {
     if (busy.current || isLoading) return;
     setError(null);
 
@@ -46,13 +58,17 @@ export function usePlantPhoto() {
     // do not require broad access to the user's photo library.
     let selection: ImagePicker.ImagePickerResult;
     try {
-      selection = await ImagePicker.launchImageLibraryAsync({
+      const options: Parameters<typeof ImagePicker.launchImageLibraryAsync>[0] = {
         mediaTypes: ['images'],
         allowsEditing: true,
         aspect: [4, 3],
         quality: 1,
         exif: false,
-      });
+      };
+      selection =
+        source === 'camera'
+          ? await ImagePicker.launchCameraAsync(options)
+          : await ImagePicker.launchImageLibraryAsync(options);
     } catch {
       setError('Could not open your photo library. Please try again.');
       return;
@@ -128,5 +144,18 @@ export function usePlantPhoto() {
     }
   }, [isLoading]);
 
-  return { photoUri, isLoading, isSaving, error, pickPhoto, removePhoto };
+  const value = useMemo(
+    () => ({ photoUri, isLoading, isSaving, error, pickPhoto, removePhoto }),
+    [photoUri, isLoading, isSaving, error, pickPhoto, removePhoto],
+  );
+
+  return createElement(PlantPhotoContext.Provider, { value }, children);
+}
+
+export function usePlantPhoto() {
+  const context = useContext(PlantPhotoContext);
+  if (!context) {
+    throw new Error('usePlantPhoto must be used within PlantPhotoProvider');
+  }
+  return context;
 }

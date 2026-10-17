@@ -5,6 +5,9 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { PlantCareProvider } from '@/context/PlantCareContext';
+import { PlantIdentityProvider } from '@/context/PlantIdentityContext';
+import { PlantPhotoProvider } from '@/hooks/usePlantPhoto';
+import { setBaseUrl } from '@workspace/api-client-react';
 import {
   DMSans_400Regular,
   DMSans_500Medium,
@@ -18,12 +21,22 @@ import * as SplashScreen from 'expo-splash-screen';
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
+const apiDomain = process.env.EXPO_PUBLIC_DOMAIN;
+setBaseUrl(
+  apiDomain
+    ? /^https?:\/\//i.test(apiDomain)
+      ? apiDomain
+      : `https://${apiDomain}`
+    : null,
+);
+
 const queryClient = new QueryClient();
 
 function RootLayoutNav() {
   return (
     <Stack screenOptions={{ headerBackTitle: 'Back' }}>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="identify" options={{ headerShown: false }} />
     </Stack>
   );
 }
@@ -49,11 +62,15 @@ export default function RootLayout() {
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
           <PlantCareProvider>
-            <GestureHandlerRootView>
-              <KeyboardProvider>
-                <RootLayoutNav />
-              </KeyboardProvider>
-            </GestureHandlerRootView>
+            <PlantIdentityProvider>
+              <PlantPhotoProvider>
+                <GestureHandlerRootView>
+                  <KeyboardProvider>
+                    <RootLayoutNav />
+                  </KeyboardProvider>
+                </GestureHandlerRootView>
+              </PlantPhotoProvider>
+            </PlantIdentityProvider>
           </PlantCareProvider>
         </QueryClientProvider>
       </ErrorBoundary>

@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { usePlantCare } from '@/context/PlantCareContext';
 import { usePlantPhoto } from '@/hooks/usePlantPhoto';
 import { useColors } from '@/hooks/useColors';
+import { usePlantIdentity } from '@/context/PlantIdentityContext';
 import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState } from 'react';
@@ -23,6 +24,7 @@ export default function MoistureDashboard() {
   const { isReady, lastWateredAt, lastSoilCheckAt, sensorHost, sensorConnected, moisturePercent,
     lastReadingAt, nextCheckAt, refreshSensor, logWatering, logSoilCheck } = usePlantCare();
   const { photoUri, isLoading: photoLoading, isSaving: photoSaving, error: photoError, pickPhoto, removePhoto } = usePlantPhoto();
+  const { identity } = usePlantIdentity();
   const [sensorLoading, setSensorLoading] = useState(false);
   const [sensorError, setSensorError] = useState<string | null>(null);
   const [careFeedback, setCareFeedback] = useState<string | null>(null);
@@ -40,6 +42,8 @@ export default function MoistureDashboard() {
     subtitle: { color: colors.mutedForeground, fontFamily: 'DMSans_400Regular', fontSize: 13, marginTop: 3 },
     connect: { minHeight: 42, paddingHorizontal: 12, borderRadius: 12, backgroundColor: colors.secondary, flexDirection: 'row', alignItems: 'center', gap: 7 },
     connectLabel: { color: colors.secondaryForeground, fontFamily: 'DMSans_600SemiBold', fontSize: 12 },
+    identifyAction: { minHeight: 44, paddingHorizontal: 13, borderRadius: 12, backgroundColor: colors.secondary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+    identifyActionText: { color: colors.secondaryForeground, fontFamily: 'DMSans_600SemiBold', fontSize: 12 },
     photoCard: { minHeight: 102, flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card },
     photo: { width: 76, height: 76, borderRadius: 12, backgroundColor: colors.muted },
     photoEmpty: { width: 76, height: 76, borderRadius: 12, backgroundColor: colors.secondary, alignItems: 'center', justifyContent: 'center' },
@@ -133,7 +137,7 @@ export default function MoistureDashboard() {
         <View style={styles.header}>
           <View>
             <Text style={styles.title}>Plant care</Text>
-            <Text style={styles.subtitle}>Milo · Pothos</Text>
+            <Text style={styles.subtitle}>Milo · {identity?.commonName ?? 'Pothos'}</Text>
           </View>
           <Pressable accessibilityRole="button" accessibilityLabel="Open sensor connection settings"
             onPress={() => router.push('/connect')} style={({ pressed }) => [styles.connect, { opacity: pressed ? 0.75 : 1 }]} testID="open-connect">
@@ -178,6 +182,14 @@ export default function MoistureDashboard() {
           )}
         </View>
         {photoError ? <Text style={styles.errorText} accessibilityRole="alert">{photoError}</Text> : null}
+
+        <Pressable accessibilityRole="button" accessibilityLabel="Identify Milo's plant from a photo"
+          onPress={() => router.push('/identify')}
+          style={({ pressed }) => [styles.identifyAction, { opacity: pressed ? 0.75 : 1 }]}
+          testID="identify-plant">
+          <Feather name="search" size={16} color={colors.secondaryForeground} />
+          <Text style={styles.identifyActionText}>Identify this plant</Text>
+        </Pressable>
 
         <View style={styles.moistureCard}>
           <View style={styles.sectionTop}>
