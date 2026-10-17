@@ -33,7 +33,7 @@
 .fieldnotes-scroll {
   min-height: 100dvh;
   overflow-y: auto;
-  padding: 37px 22px 112px;
+  padding: max(37px, calc(env(safe-area-inset-top, 0px) + 12px)) 22px calc(112px + env(safe-area-inset-bottom, 0px));
 }
 
 .fieldnotes-content {
@@ -315,9 +315,9 @@
   z-index: 5;
   left: 0;
   right: 0;
-  bottom: 0;
+  bottom: env(safe-area-inset-bottom, 0px);
   min-height: 73px;
-  padding: 9px max(21px, calc((100vw - 420px) / 2)) 11px;
+  padding: 9px max(21px, calc((100vw - 420px) / 2)) calc(11px + env(safe-area-inset-bottom, 0px));
   display: flex;
   align-items: center;
   gap: 8px;
@@ -388,13 +388,34 @@
 .fn-setup-note { display: flex; align-items: flex-start; gap: 12px; }
 .fn-setup-index { color: var(--fn-coral); font: 10px "DM Mono", monospace; white-space: nowrap; }
 .fn-setup-note p { margin: 0; color: #626c74; font-size: 11px; line-height: 1.55; }
+.fn-address-label {
+  display: block;
+  margin: 3px 0 -8px;
+  color: var(--fn-ink);
+  font: 600 11px "DM Sans", sans-serif;
+}
+.fn-address-input {
+  width: 100%;
+  height: 47px;
+  border: 1px solid #c8beaa;
+  border-radius: 3px;
+  outline: none;
+  padding: 0 12px;
+  background: rgba(245, 239, 223, .72);
+  color: var(--fn-ink);
+  font: 500 13px "DM Mono", monospace;
+  transition: border-color .16s ease, background-color .16s ease;
+}
+.fn-address-input::placeholder { color: #a19a88; }
+.fn-address-input:focus { border-color: var(--fn-coral); background: #fffaf0; }
+.fn-address-error { margin: -7px 0 0; color: var(--fn-coral-dark); font: 10px/1.45 "DM Sans", sans-serif; }
 .fn-connect-action { width: 100%; margin-top: 18px; padding: 0 12px; }
 .fn-connect-action > span { flex: 1; }
 .fn-local-only { margin: 12px 0 0; color: #878476; font-size: 10px; line-height: 1.5; }
 .fn-return-link { align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; border: 0; padding: 0; background: none; color: var(--fn-coral-dark); font: 600 11px "DM Sans", sans-serif; cursor: pointer; }
 
 @media (max-width: 390px) {
-  .fieldnotes-scroll { padding: 28px 17px 104px; }
+  .fieldnotes-scroll { padding: max(28px, calc(env(safe-area-inset-top, 0px) + 12px)) 17px calc(104px + env(safe-area-inset-bottom, 0px)); }
   .fn-title { font-size: 33px; }
   .fn-hero { height: 182px; padding-left: 15px; }
   .fn-plant-art { right: -7px; width: 150px; }

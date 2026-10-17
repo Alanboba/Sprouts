@@ -8,7 +8,7 @@
     "scheme": "sprout",
     "userInterfaceStyle": "automatic",
     "splash": {
-      "backgroundColor": "#F4F5EC",
+      "backgroundColor": "#F5EFDF",
       "image": "./assets/images/icon.png",
       "resizeMode": "contain"
     },

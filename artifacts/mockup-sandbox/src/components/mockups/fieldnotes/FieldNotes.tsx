@@ -52,6 +52,8 @@ export default function FieldNotes() {
   const [message, setMessage] = useState("");
   const [screen, setScreen] = useState<"plant" | "connect">("plant");
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [deviceAddress, setDeviceAddress] = useState("192.168.1.42");
+  const [addressError, setAddressError] = useState("");
 
   const needsWater = connected && moisture < 35;
   const title = needsWater
@@ -81,9 +83,13 @@ export default function FieldNotes() {
   }
 
   function toggleConnection() {
+    if (!connected && !/^(?:\d{1,3}\.){3}\d{1,3}(?::\d{1,5})?$/.test(deviceAddress.trim())) {
+      setAddressError("Enter the local address shown in Arduino IDE’s Serial Monitor.");
+      return;
+    }
+    setAddressError("");
     setConnected(!connected);
     setMessage(connected ? "Sensor disconnected. Your routine is still here." : "Sensor connected. Live readings are in.");
-    setScreen("plant");
   }
 
   function refreshReading() {
@@ -196,6 +202,24 @@ export default function FieldNotes() {
                 <span className="fn-setup-index">01—04</span>
                 <p>Connect a capacitive moisture sensor to GPIO 34, upload the included starter sketch, then enter the board’s local address.</p>
               </div>
+              <label className="fn-address-label" htmlFor="fn-device-address">ESP32 address</label>
+              <input
+                id="fn-device-address"
+                className="fn-address-input"
+                type="text"
+                inputMode="url"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                value={deviceAddress}
+                onChange={(event) => {
+                  setDeviceAddress(event.target.value);
+                  setAddressError("");
+                }}
+                placeholder="192.168.1.42"
+                aria-label="ESP32 local IP address"
+              />
+              {addressError && <p className="fn-address-error" role="alert">{addressError}</p>}
               <button className="fn-water-button fn-connect-action" onClick={toggleConnection}>
                 <Icon name={connected ? "check" : "wifi"} size={17} />
                 <span>{connected ? "Disconnect sensor" : "Connect sensor"}</span>

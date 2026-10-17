@@ -2,8 +2,9 @@
 type ModuleMap = Record<string, () => Promise<Record<string, unknown>>>;
 export const modules: ModuleMap = {
   "./components/mockups/fieldnotes/FieldNotes.tsx": () => import("../components/mockups/fieldnotes/FieldNotes.tsx"),
-  "./components/mockups/templates/OctopusJazzNightPoster-WeTRdP/JazzNightPoster.tsx": () => import("../components/mockups/templates/OctopusJazzNightPoster-WeTRdP/JazzNightPoster.tsx"),
+  "./components/mockups/fieldnotes/PairPlantWifi.tsx": () => import("../components/mockups/fieldnotes/PairPlantWifi.tsx"),
   "./components/mockups/templates/OctopusJazzNightPoster-LFf2fU/JazzNightPoster.tsx": () => import("../components/mockups/templates/OctopusJazzNightPoster-LFf2fU/JazzNightPoster.tsx"),
+  "./components/mockups/templates/OctopusJazzNightPoster-WeTRdP/JazzNightPoster.tsx": () => import("../components/mockups/templates/OctopusJazzNightPoster-WeTRdP/JazzNightPoster.tsx"),
   "./components/mockups/templates/SeveranceDinnerPartyInvite-eDz9CT/DinnerPartyPosterSeverance.tsx": () => import("../components/mockups/templates/SeveranceDinnerPartyInvite-eDz9CT/DinnerPartyPosterSeverance.tsx"),
   "./components/mockups/templates/SeveranceDinnerPartyInvite-jZxE2J/DinnerPartyPosterSeverance.tsx": () => import("../components/mockups/templates/SeveranceDinnerPartyInvite-jZxE2J/DinnerPartyPosterSeverance.tsx")
 };
