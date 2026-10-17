@@ -46,6 +46,7 @@ export default function MoistureDashboard() {
     header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     title: { color: colors.foreground, fontFamily: 'DMSans_700Bold', fontSize: 27, letterSpacing: -0.5 },
     subtitle: { color: colors.mutedForeground, fontFamily: 'DMSans_400Regular', fontSize: 13, marginTop: 3 },
+    nicknameEdit: { flexDirection: 'row', alignItems: 'center', gap: 7, minHeight: 38, alignSelf: 'flex-start', maxWidth: 205 },
     connect: { minHeight: 42, paddingHorizontal: 12, borderRadius: 12, backgroundColor: colors.secondary, flexDirection: 'row', alignItems: 'center', gap: 7 },
     connectLabel: { color: colors.secondaryForeground, fontFamily: 'DMSans_600SemiBold', fontSize: 12 },
     identifyAction: { minHeight: 44, paddingHorizontal: 13, borderRadius: 12, backgroundColor: colors.secondary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
@@ -170,9 +171,19 @@ export default function MoistureDashboard() {
         <View style={styles.header}>
           <View>
             <Text style={styles.title}>Plant care</Text>
-            <Text style={styles.subtitle}>
-              {identity ? `Name · ${identity.commonName}` : 'Loading plants…'}
-            </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Edit plant nickname"
+              disabled={!identity}
+              onPress={() => router.push('/edit-name')}
+              style={({ pressed }) => [styles.nicknameEdit, { opacity: pressed ? 0.65 : 1 }]}
+              testID="edit-plant-nickname"
+            >
+              <Text style={[styles.subtitle, { flexShrink: 1 }]} numberOfLines={2}>
+                {identity ? `${identity.nickname || 'Name'} · ${identity.commonName}` : 'Loading plants…'}
+              </Text>
+              <Feather name="edit-2" size={13} color={colors.primary} />
+            </Pressable>
           </View>
           <Pressable accessibilityRole="button" accessibilityLabel="Open sensor connection settings"
             onPress={() => router.push('/connect')} style={({ pressed }) => [styles.connect, { opacity: pressed ? 0.75 : 1 }]} testID="open-connect">
@@ -222,7 +233,7 @@ export default function MoistureDashboard() {
                   testID={`plant-profile-${plant.id}`}
                 >
                   <Text style={[styles.profileChipText, selected ? styles.profileChipTextActive : null]}>
-                    {plant.commonName}
+                    {plant.nickname || plant.commonName}
                   </Text>
                   {selected ? <Feather name="check" size={13} color={colors.primaryForeground} /> : null}
                 </Pressable>

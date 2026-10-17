@@ -38,6 +38,7 @@ function RootLayoutNav() {
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="identify" options={{ headerShown: false }} />
       <Stack.Screen name="add-plant" options={{ headerShown: false }} />
+      <Stack.Screen name="edit-name" options={{ headerShown: false }} />
     </Stack>
   );
 }

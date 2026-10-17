@@ -14,3 +14,9 @@ Plant photos are device-local, not a cloud upload feature.
 **Why:** The existing care experience is local and no account, remote photo storage, or sharing feature was requested. Device-local persistence was explicitly explained during implementation.
 
 **How to apply:** Describe photos as saved on the device. Treat cross-device/cloud storage as a separate scope change, not an implied capability.
+
+The first part of the subtitle is a user-editable plant nickname, separate from its species: “Nickname · Pothos”.
+
+**Why:** The user clarified that “Name” was meant to be changed freely by the user, not displayed as a fixed label.
+
+**How to apply:** Keep nicknames specific to each plant and independent of Gemini identification and scientific/common species names.

@@ -24,6 +24,7 @@ export interface PlantIdentity {
 
 export interface PlantProfile extends PlantIdentity {
   id: string;
+  nickname?: string;
   lastWateredAt: number | null;
   lastSoilCheckAt: number | null;
 }
@@ -41,6 +42,7 @@ interface PlantIdentityContextValue {
   saveIdentity: (identity: Omit<PlantIdentity, 'confirmedAt'>) => Promise<void>;
   addPlant: (identity: Pick<PlantIdentity, 'commonName' | 'scientificName'>) => Promise<void>;
   selectPlant: (plantId: string) => Promise<void>;
+  saveNickname: (plantId: string, nickname: string) => Promise<void>;
   logWatering: () => Promise<void>;
   logSoilCheck: () => Promise<void>;
 }
@@ -53,6 +55,7 @@ function isPlantProfile(value: unknown): value is PlantProfile {
   return (
     typeof entry.id === 'string' &&
     entry.id.length > 0 &&
+    (entry.nickname === undefined || typeof entry.nickname === 'string') &&
     typeof entry.commonName === 'string' &&
     typeof entry.scientificName === 'string' &&
     (entry.confidence === null ||
@@ -273,6 +276,24 @@ export function PlantIdentityProvider({ children }: { children: ReactNode }) {
     [data, persist],
   );
 
+  const saveNickname = useCallback(
+    async (plantId: string, value: string) => {
+      const nickname = value.trim();
+      if (!nickname) throw new Error('Enter a nickname for your plant.');
+      if (nickname.length > 50) throw new Error('Keep the nickname to 50 characters or fewer.');
+      if (!data.plants.some((plant) => plant.id === plantId)) {
+        throw new Error('This plant could not be found.');
+      }
+      await persist({
+        ...data,
+        plants: data.plants.map((plant) =>
+          plant.id === plantId ? { ...plant, nickname } : plant,
+        ),
+      });
+    },
+    [data, persist],
+  );
+
   const updateActivePlant = useCallback(
     async (update: (plant: PlantProfile) => PlantProfile) => {
       const active = data.plants.find((plant) => plant.id === data.activePlantId);
@@ -316,6 +337,7 @@ export function PlantIdentityProvider({ children }: { children: ReactNode }) {
       saveIdentity,
       addPlant,
       selectPlant,
+      saveNickname,
       logWatering,
       logSoilCheck,
     }),
@@ -327,6 +349,7 @@ export function PlantIdentityProvider({ children }: { children: ReactNode }) {
       saveIdentity,
       addPlant,
       selectPlant,
+      saveNickname,
       logWatering,
       logSoilCheck,
     ],
