@@ -21,6 +21,12 @@ Plant photos are device-local, not a cloud upload feature.
 
 **How to apply:** Describe photos as saved on the device. Treat cross-device/cloud storage as a separate scope change, not an implied capability.
 
+The app's display name is “Sprouts.”
+
+**Why:** The user explicitly changed the app name from “Sprout” to “Sprouts.”
+
+**How to apply:** Use “Sprouts” in app-branded display and permission text. Keep existing slugs, URL schemes, bundle IDs, and firmware identifiers unchanged unless the user asks to migrate them.
+
 The first part of the subtitle is a user-editable plant nickname, separate from its species: “Nickname · Pothos”.
 
 **Why:** The user clarified that “Name” was meant to be changed freely by the user, not displayed as a fixed label.

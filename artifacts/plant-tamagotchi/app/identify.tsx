@@ -218,7 +218,7 @@ export default function IdentifyPlantScreen() {
     try {
       await Linking.openSettings();
     } catch {
-      setError('Open your device settings and allow camera access for Sprout.');
+      setError('Open your device settings and allow camera access for Sprouts.');
     }
   };
 

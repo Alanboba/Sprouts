@@ -1,6 +1,6 @@
 kind = "mobile"
 previewPath = "/"
-title = "Plant Pal"
+title = "Sprouts"
 description = "A mobile plant companion that helps users care for a virtual plant, follow timely watering guidance, and connect to an Arduino-compatible BLE sensor."
 version = "1.0.0"
 id = "artifacts/plant-tamagotchi"
@@ -22,3 +22,4 @@ run = [ "pnpm", "--filter", "@workspace/plant-tamagotchi", "run", "serve" ]
 [services.env]
 PORT = "23139"
 BASE_PATH = "/"
+EXPO_UNSTABLE_HEADLESS = "true"
