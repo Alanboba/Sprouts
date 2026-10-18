@@ -9,6 +9,12 @@ The user requested: “take off the unnecessary designs and generate a moisture 
 
 **How to apply:** Prioritize moisture readings, sensor status, useful watering guidance, and the user's own plant photo. Do not reintroduce journal stamps, ornamental plant artwork, or editorial filler without a new request.
 
+Keep photo requirements minimal.
+
+**Why:** The user said “don't use too many photos” after the backup identification work.
+
+**How to apply:** Use one photo by default, with at most one optional extra close-up for an uncertain match. Do not expand the interface into a large photo collection.
+
 Plant photos are device-local, not a cloud upload feature.
 
 **Why:** The existing care experience is local and no account, remote photo storage, or sharing feature was requested. Device-local persistence was explicitly explained during implementation.
