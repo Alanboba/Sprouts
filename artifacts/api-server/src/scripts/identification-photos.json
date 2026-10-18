@@ -1,0 +1,45 @@
+{
+  "version": "commons-plants-2026-10-18",
+  "labelBasis": "Wikimedia Commons file descriptions and species categories, visually checked; source labels, not independent botanical certification.",
+  "photos": [
+    {
+      "id": "monstera-leaf",
+      "expectedSpecies": "Monstera deliciosa",
+      "acceptedSpecies": ["Monstera deliciosa"],
+      "sourcePage": "https://commons.wikimedia.org/wiki/File:Monstera_deliciosa_DSC02605.jpg",
+      "imageUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/64/Monstera_deliciosa_DSC02605.jpg/960px-Monstera_deliciosa_DSC02605.jpg",
+      "creator": "Smatu",
+      "license": "CC BY-SA 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "modifications": "Wikimedia 960px thumbnail; no local crop or enhancement.",
+      "labelEvidence": "File description: leaf of Monstera deliciosa.",
+      "sha256": "97b5e9f9ec78c9d1b91c4db148f072bcb31bc3c829c28215f9c5e2d5076fda2d"
+    },
+    {
+      "id": "aloe-rosette",
+      "expectedSpecies": "Aloe vera",
+      "acceptedSpecies": ["Aloe vera", "Aloe barbadensis"],
+      "sourcePage": "https://commons.wikimedia.org/wiki/File:Aloe_vera_Lanzarote.jpg",
+      "imageUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b5/Aloe_vera_Lanzarote.jpg/960px-Aloe_vera_Lanzarote.jpg",
+      "creator": "H. Zell",
+      "license": "CC BY-SA 3.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0/",
+      "modifications": "Wikimedia 960px thumbnail; no local crop or enhancement.",
+      "labelEvidence": "File description: Aloe Vera; Lanzarote near Mala, Canary Islands, Spain. Aloe barbadensis is an accepted synonym for evaluation.",
+      "sha256": "671b3c4d077b98e5aec539903c49c4ad3dd9f6e197d6d89ed35dff1e89cff729"
+    },
+    {
+      "id": "sunflower-head",
+      "expectedSpecies": "Helianthus annuus",
+      "acceptedSpecies": ["Helianthus annuus"],
+      "sourcePage": "https://commons.wikimedia.org/wiki/File:Sunflower_head_2026_G1.jpg",
+      "imageUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/3f/Sunflower_head_2026_G1.jpg/960px-Sunflower_head_2026_G1.jpg",
+      "creator": "George Chernilevsky",
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "modifications": "Wikimedia 960px thumbnail; no local crop or enhancement.",
+      "labelEvidence": "File description: Sunflower head. Ukraine, Vinnytsia Rajon. Commons species category: Helianthus annuus.",
+      "sha256": "f2de8a7ca8964926b5bbe976bf7651eefd93a819b4a988f31b4436d400817f3b"
+    }
+  ]
+}

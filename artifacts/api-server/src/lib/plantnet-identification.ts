@@ -20,6 +20,26 @@ const invalidResponse = () => new IdentificationServiceError(
 const timeoutError = () => new IdentificationServiceError(
   "The backup took too long to identify this photo. Please try again; your photo is still saved.", 504, "timeout");
 
+export const PLANTNET_MIN_CONFIDENCE = 0.7;
+export interface PlantNetPrediction {
+  scientificName: string | null;
+  score: number | null;
+}
+
+// Diagnostic subset only: never include the response query, images or raw body.
+// A top guess is not necessarily an accepted identification.
+export function plantNetTopPrediction(payload: unknown): PlantNetPrediction {
+  const top = (payload as { results?: unknown[] } | null)?.results?.[0];
+  if (!top || typeof top !== "object") return { scientificName: null, score: null };
+  const { score, species } = top as { score?: unknown; species?: unknown };
+  const names = species && typeof species === "object"
+    ? species as { scientificNameWithoutAuthor?: unknown; scientificName?: unknown } : {};
+  return {
+    scientificName: clean(names.scientificNameWithoutAuthor, 120) || clean(names.scientificName, 120) || null,
+    score: typeof score === "number" && Number.isFinite(score) && score >= 0 && score <= 1 ? score : null,
+  };
+}
+
 export function normalizePlantNetIdentification(payload: unknown): PlantIdentificationResult {
   if (!payload || typeof payload !== "object" || !Array.isArray((payload as { results?: unknown }).results)) {
     throw invalidResponse();
@@ -30,7 +50,7 @@ export function normalizePlantNetIdentification(payload: unknown): PlantIdentifi
   if (!top || typeof top !== "object") throw invalidResponse();
   const { score, species } = top as { score?: unknown; species?: unknown };
   const confidence = typeof score === "number" && Number.isFinite(score) && score >= 0 && score <= 1 ? score : null;
-  if (confidence === null || confidence < 0.7) return uncertain(confidence);
+  if (confidence === null || confidence < PLANTNET_MIN_CONFIDENCE) return uncertain(confidence);
   if (!species || typeof species !== "object") return uncertain(confidence);
   const names = species as { scientificNameWithoutAuthor?: unknown; scientificName?: unknown; commonNames?: unknown };
   const scientificName = clean(names.scientificNameWithoutAuthor, 120) || clean(names.scientificName, 120);
@@ -50,7 +70,11 @@ export async function identifyPlantWithPlantNet(
   input: PlantIdentificationInput,
   apiKey: string,
   fetcher: typeof fetch = fetch,
-  options: { timeoutMs?: number; onEvent?: (event: PlantNetEvent) => void } = {},
+  options: {
+    timeoutMs?: number;
+    onEvent?: (event: PlantNetEvent) => void;
+    onPrediction?: (prediction: PlantNetPrediction) => void;
+  } = {},
 ): Promise<PlantIdentificationResult> {
   if (!apiKey.trim()) throw new IdentificationServiceError("The Pl@ntNet backup is not configured. The app owner needs to add PLANTNET_API_KEY in Secrets.", 503, "configuration");
   const photos = [input, ...(input.additionalPhotos ?? [])];
@@ -104,6 +128,7 @@ export async function identifyPlantWithPlantNet(
       emit("body_received");
       stage = "parsing_response";
       const result = normalizePlantNetIdentification(payload);
+      options.onPrediction?.(plantNetTopPrediction(payload));
       emit("completed");
       return result;
     }, timeoutError);

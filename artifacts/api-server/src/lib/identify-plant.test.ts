@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { identifyPlant, type IdentificationEvent } from "./identify-plant";
 import { IdentificationServiceError } from "./identification-provider";
-import { identifyPlantWithPlantNet, normalizePlantNetIdentification } from "./plantnet-identification";
+import {
+  identifyPlantWithPlantNet, normalizePlantNetIdentification, plantNetTopPrediction, PLANTNET_MIN_CONFIDENCE,
+} from "./plantnet-identification";
 import { createIdentificationCache } from "./plant-identification-cache";
 import { IdentifyPlantBody } from "@workspace/api-zod";
 
@@ -252,6 +254,28 @@ test("backup normalization suppresses low/invalid scores, missing species and in
   assert.equal(normalizePlantNetIdentification({ results: [{ score: 0.9, species: { commonNames: ["Unknown"] } }] }).status, "uncertain");
   const result = normalizePlantNetIdentification({ ...pnMatch, description: "Invented description" });
   assert.equal(result.description, undefined);
+});
+
+test("accuracy diagnostics preserve genuine scores without accepting a below-threshold guess", async () => {
+  assert.equal(PLANTNET_MIN_CONFIDENCE, 0.7);
+  for (const score of [0, 0.699999, 0.7, 1]) {
+    const payload = { results: [{ ...pnMatch.results[0], score }], query: {
+      "api-key": keys.plantnet, images: [photo.imageBase64],
+    } };
+    let prediction: unknown;
+    const result = await identifyPlantWithPlantNet(photo, keys.plantnet,
+      async () => new Response(JSON.stringify(payload)), {
+        onPrediction: (value) => { prediction = value; },
+      });
+    assert.deepEqual(prediction, { scientificName: "Epipremnum aureum", score });
+    assert.equal(result.confidence, score);
+    assert.equal(result.status, score >= 0.7 ? "identified" : "uncertain");
+    if (score < 0.7) assert.equal(result.scientificName, "");
+    assert.equal(JSON.stringify(prediction).includes(keys.plantnet), false);
+    assert.equal(JSON.stringify(prediction).includes(photo.imageBase64), false);
+  }
+  assert.deepEqual(plantNetTopPrediction({ results: [] }), { scientificName: null, score: null });
+  assert.deepEqual(plantNetTopPrediction({ results: [{ score: "0.99" }] }), { scientificName: null, score: null });
 });
 
 test("a missing common name honestly uses the supplied scientific name and asks for review", () => {
