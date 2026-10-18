@@ -48,7 +48,6 @@ void drawFrame(const uint16_t* frame, int width, int height) {
 }
 
 template <size_t FRAME_COUNT, size_t FRAME_PIXELS>
-template <size_t FRAME_COUNT, size_t FRAME_PIXELS>
 void playAnimation(
   const uint16_t (&frames)[FRAME_COUNT][FRAME_PIXELS],
   int width,
