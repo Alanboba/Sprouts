@@ -1,3 +1,4 @@
 - [Plant Pal product focus](plant-pal-product-focus.md) — prioritize moisture and user photos over ornamental journal styling; photos are device-local unless scope changes.
 - [Gemini availability checks](gemini-availability.md) — successful authentication/model discovery does not prove image generation works; test the actual vision request.
+- [Identification provider policy](identification-provider-policy.md) — Gemini stays primary; Pl@ntNet is an authorized backup, not a replacement or a source of invented descriptions.
 - [Orphaned development servers](orphaned-development-servers.md) — managed restarts can leave old child servers listening; verify listener ownership before restarting again.

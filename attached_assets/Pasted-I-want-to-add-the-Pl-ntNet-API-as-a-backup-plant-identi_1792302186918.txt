@@ -1,0 +1,85 @@
+I want to add the Pl@ntNet API as a backup plant-identification provider to my existing Replit project while keeping my current Gemini API integration as the primary provider.
+
+IMPORTANT: Do not rebuild my app, redesign the UI, or remove any existing functionality. Inspect my current code first and make only the changes necessary to support both APIs.
+
+1. Keep Gemini as the primary API
+
+Keep my existing Gemini API integration and its current API key setup.
+
+Continue using Gemini first for plant identification and image descriptions.
+
+Do not replace Gemini with Pl@ntNet.
+
+Preserve all existing features, components, styling, and workflows.
+
+2. Add Pl@ntNet as a backup
+
+Integrate the official Pl@ntNet plant-identification API using its current documentation: https://my.plantnet.org/doc/
+
+Store the API key in Replit Secrets as PLANTNET_API_KEY.
+
+Keep both API keys on the backend. Never expose them in frontend code.
+
+When Gemini fails because of quota limits, rate limits, temporary server errors, or an unavailable service, automatically attempt plant identification with Pl@ntNet.
+
+If Gemini returns an error, do not crash the app or leave the user stuck on a loading screen.
+
+Handle API timeouts and invalid responses safely.
+
+Do not switch providers for an invalid image or unsupported file unless the failure is actually something the backup provider can reasonably handle.
+
+3. Preserve photo upload and camera functionality
+
+Keep my existing photo-upload and camera-capture interface.
+
+Make sure the actual uploaded or captured image is sent to the backend in the format required by each API.
+
+Do not break image previews, loading indicators, or existing plant-profile screens.
+
+If the image fails with one provider, attempt the backup provider when appropriate.
+
+4. Handle the different API responses correctly
+
+Gemini and Pl@ntNet return different response formats. Create a small, organized backend service that handles each provider separately and converts successful results into a consistent format for my existing frontend.
+
+Display the identified plant's name and any available confidence information.
+
+Preserve Gemini's existing image-description functionality when it works.
+
+If Pl@ntNet identifies the plant but cannot provide a detailed natural-language description, display the identification result without inventing information. If useful, keep the description separate from the identification result.
+
+If both APIs fail, show a clear, friendly error message and allow the user to try again.
+
+5. Keep my hardware and soil-moisture features unchanged
+
+Do not modify or remove my ESP32, capacitive soil-moisture sensor, or any existing hardware integration.
+
+Plant identification and soil-moisture readings must remain separate functions. Do not pretend an API can measure soil moisture from a photograph.
+
+Preserve any existing plant-care or watering recommendation features.
+
+6. Test the integration
+
+Test the primary Gemini path and the Pl@ntNet fallback path where possible.
+
+Verify that the app handles Gemini quota errors, Pl@ntNet errors, failed uploads, and successful plant identification.
+
+Do not claim a test passed unless it was actually performed.
+
+Do not fabricate API responses or use fake plant-identification results as a substitute for a working integration.
+
+7. Work carefully and explain your changes
+
+I am a beginner learning to code, so keep the implementation understandable and avoid unnecessary complexity.
+
+Before editing anything:
+
+Inspect my existing project structure and locate the current Gemini integration, photo-upload workflow, and any backend code.
+
+Explain which files need to change and how the fallback will work.
+
+Preserve all unrelated code and functionality.
+
+Then implement the smallest necessary changes. Afterward, explain how to add PLANTNET_API_KEY to Replit Secrets, how to test both providers, and what limitations remain.
+
+My goal: Gemini should remain my primary API, while Pl@ntNet automatically serves as a backup for plant identification when Gemini is unavailable. I want both APIs integrated into my existing app, not a new app.

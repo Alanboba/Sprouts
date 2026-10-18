@@ -11,6 +11,6 @@ Verify Gemini availability with a bounded, real image-generation request, not ju
 
 For timeout investigations, distinguish uncached image analysis from cached UI successes.
 
-**Why:** Repeated fixture-photo camera tests returned cached results quickly while a later real user photo timed out. A passing cached journey verifies the UI but not fresh Gemini availability or latency.
+**Why:** Repeated fixture-photo camera tests returned cached results quickly while a later real user photo timed out. Uncached provider requests also alternated between HTTP 503 and successful analysis, so even a single fresh success does not establish stable availability. A passing cached journey verifies the UI but not fresh Gemini availability or latency.
 
 **How to apply:** Include representative uncached photos in reliability verification and record whether calls reached the provider. Do not claim fresh-photo reliability from cache hits, and do not infer the reason for a timeout without stage-level evidence.

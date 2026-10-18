@@ -9,6 +9,31 @@ import {
 const GEMINI_MODEL = "gemini-3.5-flash-lite";
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 const CONFIDENCE_THRESHOLD = 0.7;
+// A fresh vision request can take longer than the former 12-second cutoff.
+// The client allows 55 seconds, leaving 10 seconds for upload/proxy overhead.
+export const GEMINI_ATTEMPT_TIMEOUT_MS = 30_000;
+export const GEMINI_TOTAL_TIMEOUT_MS = 45_000;
+
+export interface GeminiAttemptEvent {
+  event: "started" | "headers_received" | "body_received" | "completed" | "failed" | "retry_scheduled";
+  model: string;
+  attempt: number;
+  elapsedMs: number;
+  attemptElapsedMs: number;
+  stage: "waiting_for_response" | "reading_response" | "parsing_response";
+  status?: number;
+  failureKind?: "timeout" | "provider" | "transport" | "parse";
+  transportCode?: string;
+  retryDelayMs?: number;
+}
+
+function safeTransportCode(error: unknown): string | undefined {
+  const code = (error as { cause?: { code?: unknown } } | null)?.cause?.code;
+  return typeof code === "string" && [
+    "UND_ERR_CONNECT_TIMEOUT", "UND_ERR_HEADERS_TIMEOUT", "UND_ERR_BODY_TIMEOUT",
+    "ECONNRESET", "ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "ETIMEDOUT",
+  ].includes(code) ? code : undefined;
+}
 
 export class GeminiServiceError extends Error {
   constructor(
@@ -136,16 +161,35 @@ export async function identifyPlantWithGemini(
   fetcher: typeof fetch = fetch,
   options: {
     attemptTimeoutMs?: number;
+    totalTimeoutMs?: number;
     sleep?: (ms: number) => Promise<void>;
+    onAttempt?: (event: GeminiAttemptEvent) => void;
   } = {},
 ): Promise<PlantIdentificationResult> {
   const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const started = Date.now();
+  const deadline = started + (options.totalTimeoutMs ?? GEMINI_TOTAL_TIMEOUT_MS);
   // Two bounded attempts, including reading the body. Never retry permanent
   // authentication, model, input or malformed-output errors.
   for (let attempt = 0; attempt < 2; attempt++) {
+    const attemptStarted = Date.now();
+    const remaining = deadline - attemptStarted;
+    if (remaining <= 0) {
+      throw new GeminiServiceError("Gemini took too long to analyze this photo. Please try again shortly; your photo is still saved.", 504);
+    }
+    let stage: GeminiAttemptEvent["stage"] = "waiting_for_response";
+    let status: number | undefined;
+    const emit = (event: GeminiAttemptEvent["event"], extra: Partial<GeminiAttemptEvent> = {}) =>
+      options.onAttempt?.({
+        event, model: GEMINI_MODEL, attempt: attempt + 1, stage,
+        elapsedMs: Date.now() - started, attemptElapsedMs: Date.now() - attemptStarted,
+        ...(status !== undefined ? { status } : {}), ...extra,
+      });
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), options.attemptTimeoutMs ?? 12_000);
+    const timeout = setTimeout(() => controller.abort(),
+      Math.min(options.attemptTimeoutMs ?? GEMINI_ATTEMPT_TIMEOUT_MS, remaining));
     let failure: GeminiServiceError;
+    emit("started");
     try {
       const response = await fetcher(GEMINI_URL, {
         method: "POST",
@@ -171,7 +215,7 @@ export async function identifyPlantWithGemini(
                     "Return status 'identified' only when a single plant is clearly visible and you can identify both its common and scientific names with at least 70% estimated confidence.",
                     "For a blurry, distant, obstructed, ambiguous, non-plant, or multi-plant image, do not guess or list candidate species. Return status 'uncertain' or 'not_plant' and leave both names empty.",
                     "If available, give an estimated confidence as a number from 0 to 1; omit it when you cannot estimate reliably.",
-                     "For an identified plant, also return description: one or two short sentences describing visible leaf shape, color, and growth habit. Base this only on the photo; do not invent plant health, sensor readings, or watering instructions. For uncertain or non-plant images, omit description.",
+                    "For an identified plant, also return description: one or two short sentences describing visible leaf shape, color, and growth habit. Base this only on the photo; do not invent plant health, sensor readings, or watering instructions. For uncertain or non-plant images, omit description.",
                   ].join(" "),
                 },
               ],
@@ -189,7 +233,7 @@ export async function identifyPlantWithGemini(
                 },
                 commonName: { type: "STRING" },
                 scientificName: { type: "STRING" },
-                 description: { type: "STRING" },
+                description: { type: "STRING" },
                 confidence: { type: "NUMBER" },
               },
               required: ["status", "commonName", "scientificName"],
@@ -197,12 +241,19 @@ export async function identifyPlantWithGemini(
           },
         }),
       });
+      status = response.status;
+      emit("headers_received");
+      stage = "reading_response";
       if (!response.ok) {
         // Never forward Google's raw error (which can contain request details
         // or credentials). Read it only to classify exhausted quota.
-        const payload = await response.json().catch(() => null) as {
+        const payload = await response.json().catch((error: unknown) => {
+          if (controller.signal.aborted) throw error;
+          return null;
+        }) as {
           error?: { details?: unknown; message?: string };
         } | null;
+        emit("body_received");
         const details = payload?.error?.details;
         const invalidKey = response.status === 400 && (
           (Array.isArray(details) && details.some((detail) => detail?.reason === "API_KEY_INVALID")) ||
@@ -230,7 +281,9 @@ export async function identifyPlantWithGemini(
                 ? /image|mime|decode/i.test(payload?.error?.message ?? "")
                   ? "Gemini could not read this image. Choose another plant photo."
                   : "Gemini rejected the analysis request. The app owner needs to check the server request configuration."
-                : "Gemini is temporarily unavailable. Please try again shortly.";
+                : response.status === 503
+                  ? "Gemini is currently busy or unavailable. Please try again shortly; your photo is still saved."
+                  : "Gemini is temporarily unavailable. Please try again shortly.";
         throw new GeminiServiceError(
           message, response.status,
           transient && !exhaustedQuota && Number.isFinite(retryMs) && retryMs <= 2_000,
@@ -238,6 +291,8 @@ export async function identifyPlantWithGemini(
         );
       }
       const payload: unknown = await response.json();
+      emit("body_received");
+      stage = "parsing_response";
       const text = extractCandidateText(payload);
       if (!text) {
         throw new GeminiServiceError("Gemini returned no analysis. Please choose another photo or try again.", 502);
@@ -248,19 +303,28 @@ export async function identifyPlantWithGemini(
       } catch {
         throw new GeminiServiceError("Gemini returned an incomplete analysis. Please try again.", 502);
       }
-      return normalizeGeminiIdentification(modelResult);
+      const result = normalizeGeminiIdentification(modelResult);
+      emit("completed");
+      return result;
     } catch (error) {
       failure = error instanceof GeminiServiceError
         ? error
         : controller.signal.aborted
-          ? new GeminiServiceError("Plant identification timed out. Please try again shortly.", 504, true)
+          ? new GeminiServiceError("Gemini took too long to analyze this photo. Please try again shortly; your photo is still saved.", 504, true)
           : error instanceof SyntaxError
             ? new GeminiServiceError("Gemini returned an unreadable analysis. Please try again.", 502)
             : new GeminiServiceError("Could not connect to Gemini. Please try again shortly.", 503, true);
+      emit("failed", {
+        failureKind: controller.signal.aborted ? "timeout"
+          : error instanceof GeminiServiceError ? stage === "parsing_response" ? "parse" : "provider"
+            : error instanceof SyntaxError ? "parse" : "transport",
+        ...(safeTransportCode(error) ? { transportCode: safeTransportCode(error) } : {}),
+      });
     } finally {
       clearTimeout(timeout);
     }
-    if (!failure.retryable || attempt === 1) throw failure;
+    if (!failure.retryable || attempt === 1 || deadline - Date.now() <= failure.retryAfterMs) throw failure;
+    emit("retry_scheduled", { retryDelayMs: failure.retryAfterMs });
     await sleep(failure.retryAfterMs);
   }
   // The bounded loop always returns or throws.

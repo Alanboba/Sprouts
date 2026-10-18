@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import type { PlantIdentificationInput, PlantIdentificationResult } from "@workspace/api-zod";
 import { GeminiServiceError } from "./plant-identification";
 
+export type IdentificationCacheState = "hit" | "shared" | "miss";
+
 // Only short-lived results/hashes are retained, never image bytes or API keys.
 export function createIdentificationCache() {
   const results = new Map<string, { result: PlantIdentificationResult; expiresAt: number }>();
@@ -11,13 +13,21 @@ export function createIdentificationCache() {
     scope: string,
     apiKey: string,
     analyze: () => Promise<PlantIdentificationResult>,
+    onCache?: (state: IdentificationCacheState) => void,
   ): Promise<PlantIdentificationResult> => {
     const hash = createHash("sha256")
       .update(JSON.stringify([scope, apiKey, input.mimeType, input.imageBase64]))
       .digest("hex");
     const cached = results.get(hash);
-    if (cached && cached.expiresAt > Date.now()) return cached.result;
-    if (pending.has(hash)) return pending.get(hash)!;
+    if (cached && cached.expiresAt > Date.now()) {
+      onCache?.("hit");
+      return cached.result;
+    }
+    if (pending.has(hash)) {
+      onCache?.("shared");
+      return pending.get(hash)!;
+    }
+    onCache?.("miss");
     if (pending.size >= 16) {
       throw new GeminiServiceError("Plant identification is busy. Please try again shortly.", 503);
     }

@@ -5,6 +5,9 @@ import {
   identifyPlantWithGemini,
   normalizeGeminiIdentification,
   GeminiServiceError,
+  GEMINI_ATTEMPT_TIMEOUT_MS,
+  GEMINI_TOTAL_TIMEOUT_MS,
+  type GeminiAttemptEvent,
 } from "../lib/plant-identification";
 import { createIdentificationCache } from "../lib/plant-identification-cache";
 
@@ -283,7 +286,7 @@ test("timeout remains active while reading the response body", async () => {
   };
   await assert.rejects(
     identifyPlantWithGemini(fixture, "test", fakeFetch, { ...noDelay, attemptTimeoutMs: 5 }),
-    /timed out/,
+    /took too long/,
   );
 });
 
@@ -334,4 +337,120 @@ test("failed analyses are not cached and can be retried", async () => {
   await assert.rejects(cache(fixture, "client", "key", async () => { throw new Error("failed"); }));
   const result = await cache(fixture, "client", "key", async () => normalizeGeminiIdentification(identified));
   assert.equal(result.status, "identified");
+});
+
+test("a genuine response slower than the former 12-second cutoff succeeds within the new budget", async (context) => {
+  context.mock.timers.enable({ apis: ["Date", "setTimeout"] });
+  const events: GeminiAttemptEvent[] = [];
+  const fakeFetch: typeof fetch = async () => new Promise((resolve) =>
+    setTimeout(() => resolve(success()), 15_000));
+  try {
+    const pending = identifyPlantWithGemini(fixture, "private-key-marker", fakeFetch, {
+      onAttempt: (event) => events.push(event),
+    });
+    context.mock.timers.tick(15_000);
+    assert.equal((await pending).status, "identified");
+    assert.equal(events.find((event) => event.event === "headers_received")?.elapsedMs, 15_000);
+    assert.equal(events.at(-1)?.event, "completed");
+    assert.equal(events.filter((event) => event.event === "started").length, 1);
+    assert.equal(JSON.stringify(events).includes("private-key-marker"), false);
+    assert.equal(JSON.stringify(events).includes(fixture.imageBase64), false);
+    assert.equal(GEMINI_ATTEMPT_TIMEOUT_MS, 30_000);
+    assert.equal(GEMINI_TOTAL_TIMEOUT_MS, 45_000);
+  } finally {
+    context.mock.timers.reset();
+  }
+});
+
+test("the total deadline caps a single stalled attempt and prevents an over-budget retry", async () => {
+  const events: GeminiAttemptEvent[] = [];
+  let calls = 0;
+  const fakeFetch: typeof fetch = async (_url, init) => {
+    calls++;
+    return new Promise((_resolve, reject) =>
+      init?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError"))));
+  };
+  await assert.rejects(
+    identifyPlantWithGemini(fixture, "test", fakeFetch, {
+      attemptTimeoutMs: 100, totalTimeoutMs: 5,
+      onAttempt: (event) => events.push(event),
+    }),
+    (error: unknown) => error instanceof GeminiServiceError && error.upstreamStatus === 504,
+  );
+  assert.equal(calls, 1);
+  assert.equal(events.at(-1)?.failureKind, "timeout");
+  assert.equal(events.at(-1)?.stage, "waiting_for_response");
+});
+
+test("the retry receives only the remaining total budget, not another full attempt", async () => {
+  const events: GeminiAttemptEvent[] = [];
+  let calls = 0;
+  const fakeFetch: typeof fetch = async (_url, init) => {
+    calls++;
+    if (calls === 1) return new Response("{}", { status: 503 });
+    return new Promise((_resolve, reject) =>
+      init?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError"))));
+  };
+  await assert.rejects(identifyPlantWithGemini(fixture, "test", fakeFetch, {
+    attemptTimeoutMs: 1_000, totalTimeoutMs: 800,
+    onAttempt: (event) => events.push(event),
+  }), /took too long/);
+  assert.equal(calls, 2);
+  const attempts = events.filter((event) => event.event === "started");
+  assert.equal(attempts[1]?.attempt, 2);
+  assert.ok((attempts[1]?.elapsedMs ?? 0) >= 550);
+  assert.ok((events.at(-1)?.attemptElapsedMs ?? 1_000) < 1_000);
+});
+
+test("attempt diagnostics distinguish provider body timeouts and safe transport failures", async () => {
+  for (const stage of ["reading_response", "waiting_for_response"]) {
+    const events: GeminiAttemptEvent[] = [];
+    const fakeFetch: typeof fetch = async (_url, init) => {
+      if (stage === "waiting_for_response") {
+        throw new TypeError("private network detail", { cause: { code: "ECONNRESET", url: "private" } });
+      }
+      const response = success();
+      Object.defineProperty(response, "json", { value: () => new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
+      }) });
+      return response;
+    };
+    await assert.rejects(identifyPlantWithGemini(fixture, "test", fakeFetch, {
+      ...noDelay, attemptTimeoutMs: 5,
+      onAttempt: (event) => events.push(event),
+    }));
+    const failed = events.find((event) => event.event === "failed");
+    assert.equal(failed?.stage, stage);
+    assert.equal(failed?.failureKind, stage === "reading_response" ? "timeout" : "transport");
+    assert.equal(failed?.transportCode, stage === "waiting_for_response" ? "ECONNRESET" : undefined);
+    assert.equal(JSON.stringify(events).includes("private"), false);
+  }
+});
+
+test("provider errors are timed and classified without forwarding raw error details", async () => {
+  const events: GeminiAttemptEvent[] = [];
+  const fakeFetch: typeof fetch = async () => new Response(
+    JSON.stringify({ error: { message: "private provider detail" } }), { status: 503 });
+  await assert.rejects(identifyPlantWithGemini(fixture, "test", fakeFetch, {
+    ...noDelay, onAttempt: (event) => events.push(event),
+  }), /busy or unavailable/);
+  assert.equal(events.filter((event) => event.event === "started").length, 2);
+  assert.equal(events.find((event) => event.event === "failed")?.failureKind, "provider");
+  assert.equal(events.find((event) => event.event === "failed")?.status, 503);
+  assert.equal(JSON.stringify(events).includes("private"), false);
+});
+
+test("cache diagnostics distinguish fresh, shared, and repeated results", async () => {
+  const cache = createIdentificationCache();
+  const states: string[] = [];
+  const analyze = async () => {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    return normalizeGeminiIdentification(identified);
+  };
+  await Promise.all([
+    cache(fixture, "client", "key", analyze, (state) => states.push(state)),
+    cache(fixture, "client", "key", analyze, (state) => states.push(state)),
+  ]);
+  await cache(fixture, "client", "key", analyze, (state) => states.push(state));
+  assert.deepEqual(states, ["miss", "shared", "hit"]);
 });

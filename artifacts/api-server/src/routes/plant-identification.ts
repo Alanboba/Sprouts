@@ -55,6 +55,7 @@ function hasValidBase64(value: string): boolean {
 }
 
 router.post("/plants/identify", async (req, res): Promise<void> => {
+  const receivedAt = Date.now();
   const parsed = IdentifyPlantBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Choose a valid plant image and try again." });
@@ -95,6 +96,7 @@ router.post("/plants/identify", async (req, res): Promise<void> => {
 
   try {
     const clientKey = getClientKey(req);
+    req.log.info({ imageBytes: bytes.length, mimeType: input.mimeType }, "Plant identification image received");
     const result = await identifyCached(input, clientKey, apiKey, async () => {
       const retryAfter = takeRateLimitToken(clientKey, Date.now());
       if (retryAfter !== null) {
@@ -103,8 +105,14 @@ router.post("/plants/identify", async (req, res): Promise<void> => {
           429, false, retryAfter * 1000,
         );
       }
-      return identifyPlantWithGemini(input, apiKey);
+      return identifyPlantWithGemini(input, apiKey, fetch, {
+        onAttempt: (event) => req.log.info(event, "Plant identification Gemini attempt"),
+      });
+    }, (cacheState) => {
+      res.setHeader("X-Plant-Analysis-Cache", cacheState);
+      req.log.info({ cacheState }, "Plant identification cache");
     });
+    req.log.info({ elapsedMs: Date.now() - receivedAt, resultStatus: result.status }, "Plant identification completed");
     res.json(IdentifyPlantResponse.parse(result));
   } catch (error) {
     const message =

@@ -7,6 +7,7 @@ import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollV
 import { usePlantIdentity } from '@/context/PlantIdentityContext';
 import { useColors } from '@/hooks/useColors';
 import { usePlantPhoto } from '@/hooks/usePlantPhoto';
+import { IdentificationTimeoutError, withIdentificationDeadline } from '@/utils/identification-deadline';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -222,18 +223,13 @@ export default function IdentifyPlantScreen() {
     }
     const controller = new AbortController();
     activeRequest.current = controller;
-    let timedOut = false;
-    const timeout = setTimeout(() => {
-      timedOut = true;
-      controller.abort();
-    }, 32_000);
     setResult(null);
     setIsIdentifying(true);
     try {
-      const identification = await identifyPlant({
+      const identification = await withIdentificationDeadline((signal) => identifyPlant({
         mimeType: match[1] as 'image/jpeg' | 'image/png' | 'image/webp',
         imageBase64: match[2],
-      }, { signal: controller.signal });
+      }, { signal }), controller);
       if (activeRequest.current !== controller) return;
       lastAnalysis.current = {
         photo: photoUri,
@@ -243,12 +239,11 @@ export default function IdentifyPlantScreen() {
       applyResult(identification);
     } catch (requestError) {
       if (activeRequest.current === controller) {
-        setError(timedOut
-          ? 'Plant identification took too long. Check your connection and try again.'
+        setError(requestError instanceof IdentificationTimeoutError
+          ? requestError.message
           : getApiErrorMessage(requestError));
       }
     } finally {
-      clearTimeout(timeout);
       if (activeRequest.current === controller) {
         activeRequest.current = null;
         setIsIdentifying(false);
