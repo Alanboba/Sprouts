@@ -1,0 +1,85 @@
+My smart plant-watering app's photo-upload and Gemini plant-description feature is still broken despite previous repair attempts. I need you to diagnose and FIX the actual problem, not just make more speculative changes.
+
+IMPORTANT:
+- Do not rebuild my project from scratch.
+- Do not switch away from Google Gemini.
+- Do not redesign the UI or remove existing functionality.
+- Preserve my existing framework, code, styling, and plant-care workflow.
+- Make targeted changes and verify them with tests.
+
+STEP 1 — TRACE THE ENTIRE WORKFLOW
+
+Inspect the existing code and trace these steps:
+1. The user selects a photo or opens the camera.
+2. The selected image is stored in frontend state.
+3. The image preview is displayed.
+4. The image is converted or prepared for submission.
+5. The frontend sends the image to the appropriate backend endpoint, if one exists.
+6. The backend sends the image and plant-identification prompt to Google Gemini.
+7. Gemini returns a response.
+8. The response is parsed and displayed as a plant description in the existing UI.
+
+Identify the exact step that fails before making changes.
+
+STEP 2 — FIX PHOTO UPLOAD
+
+- Verify that the upload button opens the file picker and that the camera option works on supported devices.
+- Check that the selected file is actually stored in state and that the preview uses the correct file or URL.
+- Validate that the file is an image and handle unsupported formats.
+- Check whether the image is accidentally cleared, converted incorrectly, or omitted from the API request.
+- Ensure the image MIME type matches the actual image data.
+- Handle large images appropriately by resizing or compressing them when necessary.
+- Revoke temporary object URLs when they are no longer needed.
+- Display useful errors if file selection, preview generation, conversion, or upload fails.
+
+STEP 3 — FIX GEMINI IMAGE ANALYSIS
+
+- Verify that the application reads the current GEMINI_API_KEY from Replit Secrets using the correct server-side environment-variable mechanism.
+- Find and remove any accidental use of an old, hardcoded API key.
+- Verify the current Gemini SDK, supported model identifier, request structure, and image-input format against Google's official documentation.
+- Ensure the actual image bytes or valid base64 image data are included in the Gemini request along with the plant-identification prompt.
+- Do not send only the image filename, preview URL, or an empty image object.
+- Verify that the application extracts the actual generated text from the Gemini response using the response format supported by the SDK currently installed.
+- Preserve the existing Gemini integration where possible instead of replacing the entire SDK.
+- If the app is frontend-only, use a minimal compatible backend if necessary to call Gemini securely.
+- Never expose the API key in browser code, client bundles, or client-visible logs.
+
+STEP 4 — IDENTIFY THE REAL ERROR
+
+Inspect browser console errors, network request failures, server logs, and Gemini API error responses.
+
+Distinguish between:
+- Invalid or missing API key
+- Exhausted quota or rate limit (such as HTTP 429)
+- Unsupported or unavailable model
+- Invalid image or MIME type
+- Incorrect request payload
+- Backend endpoint not found or failing
+- CORS or network errors
+- Response parsing errors
+- Frontend state or rendering bugs
+
+Return a useful error message for each failure category. Do not disguise an API error as a successful identification or silently return a hardcoded plant description.
+
+STEP 5 — TEST THE FIX
+
+Test the upload and identification flow with a real image of a plant if possible.
+
+Verify:
+- Selecting an image works.
+- The image preview appears.
+- The image reaches Gemini.
+- The generated plant description appears in the existing UI.
+- Loading indicators stop on both success and failure.
+- Errors are displayed clearly.
+- The API key remains private.
+
+If a real Gemini request cannot be tested because of exhausted quota, billing, or credentials, state that explicitly. Do not claim the feature works without evidence.
+
+At the end, tell me:
+1. The actual root cause.
+2. The files you changed and why.
+3. The test results.
+4. Any remaining blocker that requires my action.
+
+Make the smallest necessary changes, run the project, and fix any reproducible errors before finishing.

@@ -1,0 +1,155 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: plants
+    description: Plant identification
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+  /plants/identify:
+    post:
+      operationId: identifyPlant
+      tags: [plants]
+      summary: Identify a plant from one or two photos
+      description: Uses Gemini first and Pl@ntNet as a backup for eligible service failures. An optional close-up must show the same plant. Each image is limited to 1.5 MB decoded (3 MB combined). Images are processed in memory and are not saved by this API. Extra photos do not lower confidence requirements.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlantIdentificationInput"
+      responses:
+        "200":
+          description: Identification result or a request for a clearer image
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlantIdentificationResult"
+        "400":
+          description: Invalid image or request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "413":
+          description: Image exceeds the request limit
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "429":
+          description: Too many identification requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "502":
+          description: Identification providers returned an unusable response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: Identification is not configured or the providers are unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "504":
+          description: Identification exceeded its bounded time limit
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+    PlantIdentificationInput:
+      type: object
+      additionalProperties: false
+      properties:
+        imageBase64:
+          type: string
+          minLength: 40
+          maxLength: 2000000
+          description: Base64-encoded JPEG, PNG, or WebP image bytes (without a data URL prefix).
+        mimeType:
+          type: string
+          enum: [image/jpeg, image/png, image/webp]
+        additionalPhotos:
+          type: array
+          maxItems: 1
+          description: Optional second close-up of the same plant after an uncertain result. Gemini accepts JPEG, PNG and WebP; Pl@ntNet requires every image to be JPEG or PNG. No image is silently dropped.
+          items:
+            $ref: "#/components/schemas/PlantIdentificationPhoto"
+      required: [imageBase64, mimeType]
+    PlantIdentificationPhoto:
+      type: object
+      additionalProperties: false
+      properties:
+        imageBase64:
+          type: string
+          minLength: 40
+          maxLength: 2000000
+          description: Base64 image bytes without a data URL prefix; at most 1.5 MB decoded.
+        mimeType:
+          type: string
+          enum: [image/jpeg, image/png, image/webp]
+      required: [imageBase64, mimeType]
+    PlantIdentificationResult:
+      type: object
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum: [identified, uncertain, not_plant]
+        commonName:
+          type: string
+        scientificName:
+          type: string
+        description:
+          type: string
+          maxLength: 600
+          description: Gemini-generated visual description of an identified plant; omitted when uncertain or when Pl@ntNet supplies the identification.
+        confidence:
+          type: ["number", "null"]
+          minimum: 0
+          maximum: 1
+          description: Provider's estimated confidence or identification score (0 to 1); null when unavailable. This is not a guarantee.
+        message:
+          type: string
+      required: [status, commonName, scientificName, confidence, message]
+    ApiError:
+      type: object
+      additionalProperties: false
+      properties:
+        error:
+          type: string
+      required: [error]
+
