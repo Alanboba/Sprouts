@@ -281,11 +281,11 @@ export default function MoistureDashboard() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={plants.length ? 'Add another plant' : 'Add your first plant'}
-                disabled={!plantsReady || confirmRemovePlant || isRemovingPlant}
+                disabled={!plantsReady || photoBusy || confirmRemovePlant || isRemovingPlant}
                 onPress={() => router.push('/add-plant')}
                 style={({ pressed }) => [
                   styles.addPlant,
-                  { opacity: !plantsReady || pressed ? 0.6 : 1 },
+                  { opacity: !plantsReady || photoBusy || pressed ? 0.6 : 1 },
                 ]}
                 testID="add-another-plant"
               >
@@ -308,7 +308,7 @@ export default function MoistureDashboard() {
                   accessibilityRole="button"
                   accessibilityState={{ selected }}
                   accessibilityLabel={`${plant.commonName}${selected ? ', selected' : ''}`}
-                  disabled={confirmRemovePlant || isRemovingPlant}
+                  disabled={photoBusy || confirmRemovePlant || isRemovingPlant}
                   onPress={() => void handleSelectPlant(plant.id)}
                   style={({ pressed }) => [
                     styles.profileChip,
@@ -375,11 +375,10 @@ export default function MoistureDashboard() {
             <Feather name="plus-circle" size={25} color={colors.primary} />
             <Text style={styles.emptyPlantTitle}>No plants to care for yet</Text>
             <Text style={styles.emptyPlantBody}>
-              Add a plant to save its photo, moisture checks, and care history here.
+              Choose a photo below, then add a plant. Your photo will stay with its new profile and care history.
             </Text>
           </View>
-        ) : (
-          <>
+        ) : null}
         <View style={styles.photoCard}>
           {photoLoading ? (
             <View style={styles.photoEmpty} accessibilityLabel="Loading saved plant photo">
@@ -417,16 +416,14 @@ export default function MoistureDashboard() {
         </View>
         {photoError ? <Text style={styles.errorText} accessibilityRole="alert">{photoError}</Text> : null}
 
-        <Pressable accessibilityRole="button" accessibilityLabel={`Identify ${identity?.commonName ?? 'this plant'} from a photo`}
+        {identity ? <Pressable accessibilityRole="button" accessibilityLabel={`Identify ${identity.commonName} from a photo`}
           disabled={confirmRemovePlant || isRemovingPlant}
           onPress={() => router.push('/identify')}
           style={({ pressed }) => [styles.identifyAction, { opacity: confirmRemovePlant || isRemovingPlant || pressed ? 0.55 : 1 }]}
           testID="identify-plant">
           <Feather name="search" size={16} color={colors.secondaryForeground} />
           <Text style={styles.identifyActionText}>Identify this plant</Text>
-        </Pressable>
-          </>
-        )}
+        </Pressable> : null}
 
         <View style={styles.moistureCard}>
           <View style={styles.sectionTop}>

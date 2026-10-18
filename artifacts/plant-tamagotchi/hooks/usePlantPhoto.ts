@@ -6,6 +6,7 @@ import { createContext, createElement, useCallback, useContext, useEffect, useMe
 
 // Keep photos separate from care records so replacing a photo never resets care.
 const PHOTO_KEY = 'plant-pal-photo-v1';
+const DRAFT_PHOTO_KEY = `${PHOTO_KEY}:draft`;
 const MAX_STORED_LENGTH = 1_500_000;
 export type PlantPhotoSource = 'library' | 'camera';
 
@@ -23,7 +24,7 @@ interface PlantPhotoValue {
 const PlantPhotoContext = createContext<PlantPhotoValue | null>(null);
 
 export function PlantPhotoProvider({ children }: { children: ReactNode }) {
-  const { identity } = usePlantIdentity();
+  const { identity, plants, isReady } = usePlantIdentity();
   const photoKeyForPlant = useCallback(
     (plantId: string) =>
       plantId && plantId !== 'plant-default'
@@ -31,7 +32,9 @@ export function PlantPhotoProvider({ children }: { children: ReactNode }) {
         : PHOTO_KEY,
     [],
   );
-  const photoKey = photoKeyForPlant(identity?.id ?? '');
+  const photoKey = identity ? photoKeyForPlant(identity.id) : DRAFT_PHOTO_KEY;
+  const activePhotoKey = useRef(photoKey);
+  activePhotoKey.current = photoKey;
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -39,12 +42,25 @@ export function PlantPhotoProvider({ children }: { children: ReactNode }) {
   const busy = useRef(false);
 
   useEffect(() => {
+    if (!isReady) return;
     let mounted = true;
     setPhotoUri(null);
     setIsLoading(true);
     setError(null);
     AsyncStorage.getItem(photoKey)
-      .then((saved) => {
+      .then(async (stored) => {
+        let saved = stored;
+        // A photo can be chosen before the first profile exists. Attach it to
+        // that first profile without sharing photos between existing plants.
+        if (!saved && photoKey !== DRAFT_PHOTO_KEY && plants.length === 1) {
+          const draft = await AsyncStorage.getItem(DRAFT_PHOTO_KEY);
+          if (draft?.startsWith('data:image/jpeg;base64,') && mounted) {
+            await AsyncStorage.setItem(photoKey, draft);
+            saved = draft;
+            if (mounted) setPhotoUri(draft);
+            await AsyncStorage.removeItem(DRAFT_PHOTO_KEY);
+          }
+        }
         if (!mounted || !saved) return;
         if (!saved.startsWith('data:image/jpeg;base64,')) {
           throw new Error('Unreadable photo');
@@ -62,7 +78,7 @@ export function PlantPhotoProvider({ children }: { children: ReactNode }) {
     return () => {
       mounted = false;
     };
-  }, [photoKey]);
+  }, [isReady, photoKey, plants.length]);
 
   const pickPhoto = useCallback(async (source: PlantPhotoSource = 'library') => {
     if (busy.current || isLoading) return;
@@ -90,7 +106,7 @@ export function PlantPhotoProvider({ children }: { children: ReactNode }) {
     }
     // Do not mark the chooser itself busy: some web browsers never resolve a
     // canceled file dialog. A subsequent tap must still be able to reopen it.
-    if (selection.canceled || busy.current) return;
+    if (selection.canceled || busy.current || activePhotoKey.current !== photoKey) return;
     const asset = selection.assets[0];
     if (!asset?.uri) {
       setError('No photo was selected. Please choose an image.');
@@ -130,7 +146,7 @@ export function PlantPhotoProvider({ children }: { children: ReactNode }) {
       } catch {
         throw new Error('Could not save the photo on this device. Free some space and try again.');
       }
-      setPhotoUri(uri);
+      if (activePhotoKey.current === photoKey) setPhotoUri(uri);
     } catch (saveError) {
       setError(
         saveError instanceof Error
