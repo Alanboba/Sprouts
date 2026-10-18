@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { PlantIdentificationInputMimeType } from './plantIdentificationInputMimeType';
+import type { PlantIdentificationPhoto } from './plantIdentificationPhoto';
 
 export interface PlantIdentificationInput {
   /**
@@ -15,4 +16,9 @@ export interface PlantIdentificationInput {
      */
   imageBase64: string;
   mimeType: PlantIdentificationInputMimeType;
+  /**
+     * Optional second close-up of the same plant after an uncertain result. Gemini accepts JPEG, PNG and WebP; Pl@ntNet requires every image to be JPEG or PNG. No image is silently dropped.
+     * @maxItems 1
+     */
+  additionalPhotos?: PlantIdentificationPhoto[];
 }

@@ -30,8 +30,8 @@ paths:
     post:
       operationId: identifyPlant
       tags: [plants]
-      summary: Identify a plant from a photo
-      description: Uses Gemini first and Pl@ntNet as a backup for eligible service failures to conservatively identify a plant photo. Images are processed in memory and are not saved by this API.
+      summary: Identify a plant from one or two photos
+      description: Uses Gemini first and Pl@ntNet as a backup for eligible service failures. An optional close-up must show the same plant. Each image is limited to 1.5 MB decoded (3 MB combined). Images are processed in memory and are not saved by this API. Extra photos do not lower confidence requirements.
       requestBody:
         required: true
         content:
@@ -99,6 +99,25 @@ components:
           minLength: 40
           maxLength: 2000000
           description: Base64-encoded JPEG, PNG, or WebP image bytes (without a data URL prefix).
+        mimeType:
+          type: string
+          enum: [image/jpeg, image/png, image/webp]
+        additionalPhotos:
+          type: array
+          maxItems: 1
+          description: Optional second close-up of the same plant after an uncertain result. Gemini accepts JPEG, PNG and WebP; Pl@ntNet requires every image to be JPEG or PNG. No image is silently dropped.
+          items:
+            $ref: "#/components/schemas/PlantIdentificationPhoto"
+      required: [imageBase64, mimeType]
+    PlantIdentificationPhoto:
+      type: object
+      additionalProperties: false
+      properties:
+        imageBase64:
+          type: string
+          minLength: 40
+          maxLength: 2000000
+          description: Base64 image bytes without a data URL prefix; at most 1.5 MB decoded.
         mimeType:
           type: string
           enum: [image/jpeg, image/png, image/webp]

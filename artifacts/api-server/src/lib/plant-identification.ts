@@ -208,15 +208,19 @@ export async function identifyPlantWithGemini(
           contents: [
             {
               parts: [
-                {
+                ...[input, ...(input.additionalPhotos ?? [])].map((photo) => ({
                   inlineData: {
-                    mimeType: input.mimeType,
-                    data: input.imageBase64,
+                    mimeType: photo.mimeType,
+                    data: photo.imageBase64,
                   },
-                },
+                })),
                 {
                   text: [
                     "Identify the plant visible in this photo for a home plant-care app.",
+                    ...(input.additionalPhotos?.length ? [
+                      "These photos are intended to show the same plant from different views. Use visual evidence from every image together.",
+                      "If the images show different plants or conflicting evidence, return 'uncertain' with empty names. Extra photos do not relax the confidence threshold.",
+                    ] : []),
                     "Be conservative. Use only visual evidence; do not infer a species from metadata or invent details.",
                     "Return status 'identified' only when a single plant is clearly visible and you can identify both its common and scientific names with at least 70% estimated confidence.",
                     "For a blurry, distant, obstructed, ambiguous, non-plant, or multi-plant image, do not guess or list candidate species. Return status 'uncertain' or 'not_plant' and leave both names empty.",

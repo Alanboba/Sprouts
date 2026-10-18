@@ -18,17 +18,26 @@ export const HealthCheckResponse = zod.object({
 
 
 /**
- * Uses Gemini first and Pl@ntNet as a backup for eligible service failures to conservatively identify a plant photo. Images are processed in memory and are not saved by this API.
- * @summary Identify a plant from a photo
+ * Uses Gemini first and Pl@ntNet as a backup for eligible service failures. An optional close-up must show the same plant. Each image is limited to 1.5 MB decoded (3 MB combined). Images are processed in memory and are not saved by this API. Extra photos do not lower confidence requirements.
+ * @summary Identify a plant from one or two photos
  */
 export const identifyPlantBodyImageBase64Min = 40;
 export const identifyPlantBodyImageBase64Max = 2000000;
+
+export const identifyPlantBodyAdditionalPhotosItemImageBase64Min = 40;
+export const identifyPlantBodyAdditionalPhotosItemImageBase64Max = 2000000;
+
+export const identifyPlantBodyAdditionalPhotosMax = 1;
 
 
 
 export const IdentifyPlantBody = zod.object({
   "imageBase64": zod.string().min(identifyPlantBodyImageBase64Min).max(identifyPlantBodyImageBase64Max).describe('Base64-encoded JPEG, PNG, or WebP image bytes (without a data URL prefix).'),
+  "mimeType": zod.enum(['image/jpeg', 'image/png', 'image/webp']),
+  "additionalPhotos": zod.array(zod.object({
+  "imageBase64": zod.string().min(identifyPlantBodyAdditionalPhotosItemImageBase64Min).max(identifyPlantBodyAdditionalPhotosItemImageBase64Max).describe('Base64 image bytes without a data URL prefix; at most 1.5 MB decoded.'),
   "mimeType": zod.enum(['image/jpeg', 'image/png', 'image/webp'])
+})).max(identifyPlantBodyAdditionalPhotosMax).optional().describe('Optional second close-up of the same plant after an uncertain result. Gemini accepts JPEG, PNG and WebP; Pl@ntNet requires every image to be JPEG or PNG. No image is silently dropped.')
 })
 
 export const identifyPlantResponseDescriptionMax = 600;

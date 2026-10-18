@@ -47,9 +47,9 @@ function takeRateLimitToken(clientKey: string, now: number): number | null {
 }
 
 function hasValidBase64(value: string): boolean {
-  return /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
-    value,
-  );
+  // Avoid a repeated regex group: megabyte-sized base64 can exhaust its stack.
+  return value.length % 4 === 0 && /^[A-Za-z0-9+/]*={0,2}$/.test(value)
+    && Buffer.from(value, "base64").toString("base64") === value;
 }
 
 router.post("/plants/identify", async (req, res): Promise<void> => {
@@ -61,26 +61,35 @@ router.post("/plants/identify", async (req, res): Promise<void> => {
   }
 
   const input: PlantIdentificationInput = parsed.data;
-  if (!hasValidBase64(input.imageBase64)) {
-    res.status(400).json({ error: "The uploaded image file is invalid." });
-    return;
-  }
+  const photos = [input, ...(input.additionalPhotos ?? [])];
+  let totalBytes = 0;
+  for (const photo of photos) {
+    if (!hasValidBase64(photo.imageBase64)) {
+      res.status(400).json({ error: "The uploaded image file is invalid." });
+      return;
+    }
 
-  const bytes = Buffer.from(input.imageBase64, "base64");
-  if (bytes.length < 32) {
-    res.status(400).json({ error: "The uploaded image file is invalid." });
-    return;
+    const bytes = Buffer.from(photo.imageBase64, "base64");
+    totalBytes += bytes.length;
+    if (bytes.length < 32) {
+      res.status(400).json({ error: "The uploaded image file is invalid." });
+      return;
+    }
+    if (bytes.length > MAX_IMAGE_BYTES) {
+      res.status(413).json({
+        error: "Choose a smaller photo (up to 1.5 MB after image compression).",
+      });
+      return;
+    }
+    if (!isPlantImage(bytes, photo.mimeType)) {
+      res.status(400).json({
+        error: "This file is not a valid JPEG, PNG, or WebP image. Choose another photo.",
+      });
+      return;
+    }
   }
-  if (bytes.length > MAX_IMAGE_BYTES) {
-    res.status(413).json({
-      error: "Choose a smaller photo (up to 1.5 MB after image compression).",
-    });
-    return;
-  }
-  if (!isPlantImage(bytes, input.mimeType)) {
-    res.status(400).json({
-      error: "This file is not a valid JPEG, PNG, or WebP image. Choose another photo.",
-    });
+  if (totalBytes > 3_000_000) {
+    res.status(413).json({ error: "Choose smaller photos (up to 3 MB combined after compression)." });
     return;
   }
 
@@ -95,7 +104,7 @@ router.post("/plants/identify", async (req, res): Promise<void> => {
 
   try {
     const clientKey = getClientKey(req);
-    req.log.info({ imageBytes: bytes.length, mimeType: input.mimeType }, "Plant identification image received");
+    req.log.info({ imageBytes: totalBytes, photoCount: photos.length }, "Plant identification images received");
     const keys = { gemini: apiKey, plantnet: plantnetKey };
     const result = await identifyCached(input, clientKey, keys, async () => {
       const retryAfter = takeRateLimitToken(clientKey, Date.now());

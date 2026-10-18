@@ -10,5 +10,7 @@ export * from './apiError';
 export * from './healthStatus';
 export * from './plantIdentificationInput';
 export * from './plantIdentificationInputMimeType';
+export * from './plantIdentificationPhoto';
+export * from './plantIdentificationPhotoMimeType';
 export * from './plantIdentificationResult';
 export * from './plantIdentificationResultStatus';

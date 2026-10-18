@@ -1,12 +1,13 @@
 import { Feather } from '@expo/vector-icons';
 import {
   identifyPlant,
+  type PlantIdentificationInput,
   type PlantIdentificationResult,
 } from '@workspace/api-client-react';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { usePlantIdentity } from '@/context/PlantIdentityContext';
 import { useColors } from '@/hooks/useColors';
-import { usePlantPhoto } from '@/hooks/usePlantPhoto';
+import { usePlantPhoto, type PlantPhotoSource } from '@/hooks/usePlantPhoto';
 import { IdentificationTimeoutError, withIdentificationDeadline } from '@/utils/identification-deadline';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -59,9 +60,14 @@ export default function IdentifyPlantScreen() {
   const [isIdentifying, setIsIdentifying] = useState(false);
   const [isSavingIdentity, setIsSavingIdentity] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [closeUp, setCloseUp] = useState<string | null>(null);
+  const [closeUpOffered, setCloseUpOffered] = useState(false);
   const scientificInputRef = useRef<TextInput>(null);
   const activeRequest = useRef<AbortController | null>(null);
-  const lastAnalysis = useRef<{ photo: string; result: PlantIdentificationResult; expiresAt: number } | null>(null);
+  const lastAnalysis = useRef<{ photos: string; result: PlantIdentificationResult; expiresAt: number } | null>(null);
+  const photoScope = `${identity?.id ?? 'draft'}:${photoUri ?? ''}`;
+  const currentScope = useRef(photoScope);
+  currentScope.current = photoScope;
   const routeAutoConsumed = useRef(false);
   const [cameraAutoRequested, setCameraAutoRequested] = useState(false);
 
@@ -70,12 +76,15 @@ export default function IdentifyPlantScreen() {
     setCommonName('');
     setScientificName('');
     setError(null);
+    setCloseUp(null);
+    setCloseUpOffered(false);
+    lastAnalysis.current = null;
     setIsIdentifying(false);
     return () => {
       activeRequest.current?.abort();
       activeRequest.current = null;
     };
-  }, [photoUri]);
+  }, [photoUri, identity?.id]);
 
   const styles = StyleSheet.create({
     page: { flex: 1, backgroundColor: colors.background },
@@ -159,8 +168,23 @@ export default function IdentifyPlantScreen() {
 
   const handleChoosePhoto = async () => {
     setError(null);
-    setResult(null);
     await pickPhoto('library');
+  };
+
+  const handleCloseUp = async (source: PlantPhotoSource) => {
+    if (activeRequest.current || isSaving || photoLoading || isSavingIdentity) return;
+    setError(null);
+    const scope = currentScope.current;
+    const selected = await pickPhoto(source, { temporary: true });
+    if (!selected || currentScope.current !== scope) return;
+    if (selected === photoUri) {
+      setError('Choose a different close-up of the same plant, not the original photo.');
+      return;
+    }
+    setCloseUp(selected);
+    setResult(null);
+    setCommonName('');
+    setScientificName('');
   };
 
   const handleTakePhoto = async () => {
@@ -205,19 +229,29 @@ export default function IdentifyPlantScreen() {
       setError('Take a photo or choose one from your library first.');
       return;
     }
-    const match = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(photoUri);
-    if (!match) {
-      setError('This photo could not be prepared. Please choose or take another image.');
-      return;
+    const photos: PlantIdentificationInput[] = [];
+    for (const uri of [photoUri, ...(closeUp ? [closeUp] : [])]) {
+      const match = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(uri);
+      if (!match) {
+        setError('This photo could not be prepared. Please choose or take another image.');
+        return;
+      }
+      photos.push({
+        mimeType: match[1] as PlantIdentificationInput['mimeType'],
+        imageBase64: match[2],
+      });
     }
+    const photosKey = JSON.stringify([photoUri, closeUp]);
+    const scope = currentScope.current;
 
     setError(null);
     const applyResult = (identification: PlantIdentificationResult) => {
       setResult(identification);
+      if (identification.status === 'uncertain') setCloseUpOffered(true);
       setCommonName(identification.status === 'identified' ? identification.commonName : '');
       setScientificName(identification.status === 'identified' ? identification.scientificName : '');
     };
-    if (lastAnalysis.current?.photo === photoUri && lastAnalysis.current.expiresAt > Date.now()) {
+    if (lastAnalysis.current?.photos === photosKey && lastAnalysis.current.expiresAt > Date.now()) {
       applyResult(lastAnalysis.current.result);
       return;
     }
@@ -227,18 +261,18 @@ export default function IdentifyPlantScreen() {
     setIsIdentifying(true);
     try {
       const identification = await withIdentificationDeadline((signal) => identifyPlant({
-        mimeType: match[1] as 'image/jpeg' | 'image/png' | 'image/webp',
-        imageBase64: match[2],
+        ...photos[0],
+        ...(photos.length > 1 ? { additionalPhotos: [photos[1]] } : {}),
       }, { signal }), controller);
-      if (activeRequest.current !== controller) return;
+      if (activeRequest.current !== controller || currentScope.current !== scope) return;
       lastAnalysis.current = {
-        photo: photoUri,
+        photos: photosKey,
         result: identification,
         expiresAt: Date.now() + (identification.status === 'identified' ? 10 * 60_000 : 30_000),
       };
       applyResult(identification);
     } catch (requestError) {
-      if (activeRequest.current === controller) {
+      if (activeRequest.current === controller && currentScope.current === scope) {
         setError(requestError instanceof IdentificationTimeoutError
           ? requestError.message
           : getApiErrorMessage(requestError));
@@ -394,6 +428,73 @@ export default function IdentifyPlantScreen() {
           <Text style={styles.error} accessibilityRole="alert">{photoError}</Text>
         ) : null}
 
+        {closeUpOffered ? (
+          <View style={styles.card} testID="close-up-card">
+            <Text style={styles.resultTitle}>Add a second view</Text>
+            <Text style={styles.resultText}>
+              Keep the original photo and add a close-up of leaves, flowers or
+              stems from the same plant. Both photos will be checked together.
+              A second photo may help, but doesn’t guarantee a confident match.
+            </Text>
+            {closeUp ? (
+              <>
+                <Image
+                  source={{ uri: closeUp }}
+                  style={styles.photo}
+                  resizeMode="contain"
+                  accessibilityLabel="Second close-up selected for identification"
+                  testID="close-up-preview"
+                />
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Remove close-up"
+                  disabled={actionBusy || isSavingIdentity}
+                  onPress={() => {
+                    if (activeRequest.current || isSaving || photoLoading || isSavingIdentity) return;
+                    setCloseUp(null);
+                    setResult(null);
+                    setCommonName('');
+                    setScientificName('');
+                    setError(null);
+                  }}
+                  style={styles.photoButton}
+                  testID="remove-close-up"
+                >
+                  <Text style={styles.photoButtonText}>Remove close-up</Text>
+                </Pressable>
+              </>
+            ) : null}
+            <View style={styles.photoActions}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={closeUp ? 'Retake close-up' : 'Take close-up'}
+                disabled={actionBusy || isSavingIdentity}
+                onPress={() => void handleCloseUp('camera')}
+                style={styles.photoButton}
+                testID="take-close-up"
+              >
+                <Feather name="camera" size={16} color={colors.foreground} />
+                <Text style={styles.photoButtonText}>{closeUp ? 'Retake close-up' : 'Take close-up'}</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={closeUp ? 'Replace close-up from library' : 'Choose close-up from library'}
+                disabled={actionBusy || isSavingIdentity}
+                onPress={() => void handleCloseUp('library')}
+                style={styles.photoButton}
+                testID="choose-close-up"
+              >
+                <Feather name="image" size={16} color={colors.foreground} />
+                <Text style={styles.photoButtonText}>{closeUp ? 'Replace close-up' : 'Choose close-up'}</Text>
+              </Pressable>
+            </View>
+            <Text style={styles.status}>
+              {closeUp ? '2 photos ready. ' : ''}Close-ups are temporary and won’t replace your saved photo.
+              {' '}Photos are compressed on-device; up to 1.5 MB each, 3 MB combined.
+            </Text>
+          </View>
+        ) : null}
+
         {photoUri ? (
           <Pressable
             accessibilityRole="button"
@@ -412,7 +513,9 @@ export default function IdentifyPlantScreen() {
               <Feather name="search" size={16} color={colors.primaryForeground} />
             )}
             <Text style={styles.actionText}>
-              {isIdentifying ? 'Checking the photo…' : 'Identify plant'}
+              {isIdentifying
+                ? closeUp ? 'Checking both photos…' : 'Checking the photo…'
+                : closeUp ? 'Identify with both photos' : 'Identify plant'}
             </Text>
           </Pressable>
         ) : null}
@@ -524,8 +627,9 @@ export default function IdentifyPlantScreen() {
         ) : null}
 
         <Text style={styles.privacy}>
-          Your photo is sent securely to Gemini, or to Pl@ntNet if a backup is
-          needed. It is not saved by this app’s backend. A copy stays on this device.
+          Selected photos are sent securely to Gemini, or to Pl@ntNet if a backup is
+          needed. They are not saved by this app’s backend. Your original photo
+          stays on this device; close-ups are discarded when you leave this screen.
         </Text>
       </KeyboardAwareScrollViewCompat>
     </View>

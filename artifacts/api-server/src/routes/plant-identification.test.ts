@@ -10,6 +10,67 @@ import {
   type GeminiAttemptEvent,
 } from "../lib/plant-identification";
 import { createIdentificationCache } from "../lib/plant-identification-cache";
+import app from "../app";
+import { request } from "node:http";
+
+test("HTTP boundary validates every close-up and permits the bounded two-photo JSON envelope", async () => {
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise<void>((resolve) => server.once("listening", resolve));
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  const send = (body: unknown) => new Promise<{ status: number; body: { error: string } }>((resolve, reject) => {
+    const req = request({
+      host: "127.0.0.1", port: address.port, path: "/api/plants/identify",
+      method: "POST", headers: { "Content-Type": "application/json" },
+    }, (response) => {
+      let text = "";
+      response.setEncoding("utf8");
+      response.on("data", (chunk) => { text += chunk; });
+      response.on("end", () => {
+        try { resolve({ status: response.statusCode!, body: JSON.parse(text) }); }
+        catch (error) { reject(error); }
+      });
+    });
+    req.on("error", reject);
+    req.end(JSON.stringify(body));
+  });
+  const photo = {
+    mimeType: "image/jpeg",
+    imageBase64: Buffer.from([0xff, 0xd8, 0xff, ...new Array(40).fill(0)]).toString("base64"),
+  };
+  try {
+    // These all fail before configuration/provider access; no external calls.
+    for (const additionalPhotos of [
+      [{ ...photo, imageBase64: "!".repeat(44) }],
+      [{ ...photo, imageBase64: Buffer.alloc(40).toString("base64") }],
+      [{ ...photo, imageBase64: Buffer.alloc(30).toString("base64") }],
+      [{ ...photo, mimeType: "image/gif" }],
+      [photo, photo],
+    ]) {
+      assert.equal((await send({ ...photo, additionalPhotos })).status, 400);
+    }
+    const response = await send({
+      ...photo,
+      additionalPhotos: [{ ...photo, imageBase64: Buffer.alloc(1_500_000).toString("base64") }],
+    });
+    assert.equal(response.status, 400);
+    assert.match(response.body.error, /not a valid JPEG/);
+    // Almost 4 MB of base64 JSON fits the parser and reaches second-image
+    // validation; first-image signature passes but the second is invalid.
+    const large = Buffer.alloc(1_500_000);
+    large.set([0xff, 0xd8, 0xff]);
+    const pair = await send({
+      ...photo, imageBase64: large.toString("base64"),
+      additionalPhotos: [{ ...photo, imageBase64: Buffer.alloc(1_500_000).toString("base64") }],
+    });
+    assert.equal(pair.status, 400);
+    assert.match(pair.body.error, /not a valid JPEG/);
+    const oversized = await send({ ...photo, additionalPhotos: [{ ...photo, imageBase64: "A".repeat(4_200_000) }] });
+    assert.equal(oversized.status, 413);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+});
 
 test("identification accepts a complete high-confidence plant match", () => {
   const result = normalizeGeminiIdentification({

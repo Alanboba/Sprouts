@@ -4,6 +4,7 @@ import { identifyPlant, type IdentificationEvent } from "./identify-plant";
 import { IdentificationServiceError } from "./identification-provider";
 import { identifyPlantWithPlantNet, normalizePlantNetIdentification } from "./plantnet-identification";
 import { createIdentificationCache } from "./plant-identification-cache";
+import { IdentifyPlantBody } from "@workspace/api-zod";
 
 // Synthetic fixtures and provider responses are used only in unit tests.
 const imageBytes = Buffer.from([0xff, 0xd8, 0xff, ...Array.from({ length: 40 }, (_, i) => i)]);
@@ -22,6 +23,96 @@ const geminiResponse = (result: unknown = geminiMatch) => new Response(JSON.stri
 const plantnetResponse = () => new Response(JSON.stringify(pnMatch));
 const noDelay = { sleep: async () => {} };
 const isBackup = (url: Parameters<typeof fetch>[0]) => String(url).startsWith("https://my-api.plantnet.org/");
+
+const closeUpBytes = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, ...new Array(40).fill(1)]);
+const closeUp = { mimeType: "image/png" as const, imageBase64: closeUpBytes.toString("base64") };
+const twoPhotos = { ...photo, additionalPhotos: [closeUp] };
+
+test("contract keeps legacy requests and bounds the optional close-up", () => {
+  assert.equal(IdentifyPlantBody.safeParse(photo).success, true);
+  assert.equal(IdentifyPlantBody.safeParse(twoPhotos).success, true);
+  for (const additionalPhotos of [
+    [closeUp, closeUp], [{}], [{ ...closeUp, mimeType: "image/gif" }],
+    [{ ...closeUp, imageBase64: "x".repeat(2_000_001) }],
+  ]) {
+    assert.equal(IdentifyPlantBody.safeParse({ ...photo, additionalPhotos }).success, false);
+  }
+});
+
+test("Gemini sees both actual images, their MIME types and conservative same-plant instructions", async () => {
+  let calls = 0;
+  const result = await identifyPlant(twoPhotos, keys, { fetcher: async (url, init) => {
+    calls++;
+    assert.equal(isBackup(url), false);
+    const parts = JSON.parse(init?.body as string).contents[0].parts;
+    assert.deepEqual(parts.slice(0, 2), [photo, closeUp].map((image) => ({
+      inlineData: { mimeType: image.mimeType, data: image.imageBase64 },
+    })));
+    assert.match(parts[2].text, /different plants or conflicting evidence/);
+    assert.match(parts[2].text, /at least 70%/);
+    return geminiResponse({ ...geminiMatch, confidence: 0.69 });
+  } });
+  assert.equal(calls, 1);
+  assert.equal(result.status, "uncertain");
+  assert.equal(result.commonName, "");
+  assert.equal(result.description, undefined);
+});
+
+test("a two-photo service failure sends both binary images to Pl@ntNet without invented descriptions", async () => {
+  let backups = 0;
+  const result = await identifyPlant(twoPhotos, keys, { ...noDelay, fetcher: async (url, init) => {
+    if (!isBackup(url)) return new Response("{}", { status: 503 });
+    backups++;
+    assert.ok(init?.body instanceof FormData);
+    const files = init.body.getAll("images") as Blob[];
+    assert.equal(files.length, 2);
+    for (const [index, image] of [photo, closeUp].entries()) {
+      assert.equal(files[index].type, image.mimeType);
+      assert.deepEqual(Buffer.from(await files[index].arrayBuffer()), Buffer.from(image.imageBase64, "base64"));
+    }
+    assert.equal(new Headers(init.headers).has("Content-Type"), false);
+    return plantnetResponse();
+  } });
+  assert.equal(backups, 1);
+  assert.equal(result.status, "identified");
+  assert.equal(result.description, undefined);
+});
+
+test("two-photo Pl@ntNet matches still require 70 percent confidence", async () => {
+  const result = await identifyPlantWithPlantNet(twoPhotos, keys.plantnet, async () =>
+    new Response(JSON.stringify({ results: [{ ...pnMatch.results[0], score: 0.69 }] })));
+  assert.equal(result.status, "uncertain");
+  assert.equal(result.commonName, "");
+  assert.equal(result.description, undefined);
+});
+
+test("an unsupported second image is never dropped or relabeled for backup", async () => {
+  const input = { ...photo, additionalPhotos: [{ ...closeUp, mimeType: "image/webp" as const }] };
+  let backups = 0;
+  await assert.rejects(identifyPlant(input, keys, { ...noDelay, fetcher: async (url) => {
+    if (isBackup(url)) backups++;
+    return new Response("{}", { status: 503 });
+  } }), /backup supports only JPEG or PNG/);
+  await assert.rejects(identifyPlantWithPlantNet(input, keys.plantnet, async () => {
+    backups++;
+    return plantnetResponse();
+  }), /supports JPEG or PNG/);
+  assert.equal(backups, 0);
+});
+
+test("adding, replacing and removing a close-up uses the correct cache identity", async () => {
+  const cache = createIdentificationCache();
+  let calls = 0;
+  const analyze = async () => { calls++; return normalizePlantNetIdentification(pnMatch); };
+  await cache(photo, "client", keys, analyze);
+  await cache(twoPhotos, "client", keys, analyze);
+  await cache(twoPhotos, "client", keys, analyze);
+  assert.equal(calls, 2);
+  await cache({ ...photo, additionalPhotos: [photo] }, "client", keys, analyze);
+  assert.equal(calls, 3);
+  await cache(photo, "client", keys, analyze);
+  assert.equal(calls, 3);
+});
 
 test("Gemini stays first and a successful description never calls the backup", async () => {
   let calls = 0;

@@ -16,7 +16,8 @@ export function createIdentificationCache() {
     onCache?: (state: IdentificationCacheState) => void,
   ): Promise<PlantIdentificationResult> => {
     const hash = createHash("sha256")
-      .update(JSON.stringify([scope, providerConfiguration, input.mimeType, input.imageBase64]))
+      .update(JSON.stringify([scope, providerConfiguration, input.mimeType, input.imageBase64,
+        input.additionalPhotos ?? []]))
       .digest("hex");
     const cached = results.get(hash);
     if (cached && cached.expiresAt > Date.now()) {

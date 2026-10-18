@@ -53,7 +53,8 @@ export async function identifyPlantWithPlantNet(
   options: { timeoutMs?: number; onEvent?: (event: PlantNetEvent) => void } = {},
 ): Promise<PlantIdentificationResult> {
   if (!apiKey.trim()) throw new IdentificationServiceError("The Pl@ntNet backup is not configured. The app owner needs to add PLANTNET_API_KEY in Secrets.", 503, "configuration");
-  if (!["image/jpeg", "image/png"].includes(input.mimeType)) {
+  const photos = [input, ...(input.additionalPhotos ?? [])];
+  if (!photos.every((photo) => ["image/jpeg", "image/png"].includes(photo.mimeType))) {
     throw new IdentificationServiceError("The backup supports JPEG or PNG photos. Choose one of these formats and try again.", 400, "unsupported_input");
   }
   const started = Date.now();
@@ -69,9 +70,11 @@ export async function identifyPlantWithPlantNet(
       url.searchParams.set("lang", "en");
       url.searchParams.set("nb-results", "2");
       const form = new FormData();
-      const bytes = Buffer.from(input.imageBase64, "base64");
-      form.append("images", new Blob([bytes], { type: input.mimeType }),
-        input.mimeType === "image/png" ? "plant.png" : "plant.jpg");
+      for (const [index, photo] of photos.entries()) {
+        const bytes = Buffer.from(photo.imageBase64, "base64");
+        form.append("images", new Blob([bytes], { type: photo.mimeType }),
+          `plant-${index + 1}.${photo.mimeType === "image/png" ? "png" : "jpg"}`);
+      }
       // Default auto organs and rejection remain enabled. Let fetch set the
       // multipart boundary; never log this URL, form, response query or error.
       emit("started");

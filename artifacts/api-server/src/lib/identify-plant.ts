@@ -34,7 +34,8 @@ export async function identifyPlant(
   const total = Math.min(IDENTIFICATION_TOTAL_MS, options.totalTimeoutMs ?? IDENTIFICATION_TOTAL_MS);
   const fetcher = options.fetcher ?? fetch;
   const backupKey = keys.plantnet?.trim();
-  const backupSupported = ["image/jpeg", "image/png"].includes(input.mimeType);
+  const backupSupported = [input, ...(input.additionalPhotos ?? [])]
+    .every((photo) => ["image/jpeg", "image/png"].includes(photo.mimeType));
   // Without a usable backup, preserve Gemini's former full 45-second allowance.
   const primaryBudget = Math.min(total, options.primaryTimeoutMs ??
     (backupKey && backupSupported ? PRIMARY_WITH_BACKUP_MS : IDENTIFICATION_TOTAL_MS));

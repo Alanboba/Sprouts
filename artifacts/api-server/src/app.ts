@@ -27,10 +27,10 @@ app.use(
   }),
 );
 app.use(cors());
-// Plant photos are compressed to <=1.5 MB on-device; give only this endpoint
+// At most two photos, <=1.5 MB each; give only this endpoint
 // enough JSON headroom for base64 expansion. Other API routes retain Express's
 // default small body limit.
-app.use("/api/plants/identify", express.json({ limit: "2mb" }));
+app.use("/api/plants/identify", express.json({ limit: "4mb" }));
 const identificationBodyErrorHandler: ErrorRequestHandler = (
   error,
   _req,

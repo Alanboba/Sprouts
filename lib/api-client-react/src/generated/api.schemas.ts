@@ -18,6 +18,25 @@ export const PlantIdentificationInputMimeType = {
   'image/webp': 'image/webp',
 } as const;
 
+export type PlantIdentificationPhotoMimeType = typeof PlantIdentificationPhotoMimeType[keyof typeof PlantIdentificationPhotoMimeType];
+
+
+export const PlantIdentificationPhotoMimeType = {
+  'image/jpeg': 'image/jpeg',
+  'image/png': 'image/png',
+  'image/webp': 'image/webp',
+} as const;
+
+export interface PlantIdentificationPhoto {
+  /**
+     * Base64 image bytes without a data URL prefix; at most 1.5 MB decoded.
+     * @minLength 40
+     * @maxLength 2000000
+     */
+  imageBase64: string;
+  mimeType: PlantIdentificationPhotoMimeType;
+}
+
 export interface PlantIdentificationInput {
   /**
      * Base64-encoded JPEG, PNG, or WebP image bytes (without a data URL prefix).
@@ -26,6 +45,11 @@ export interface PlantIdentificationInput {
      */
   imageBase64: string;
   mimeType: PlantIdentificationInputMimeType;
+  /**
+     * Optional second close-up of the same plant after an uncertain result. Gemini accepts JPEG, PNG and WebP; Pl@ntNet requires every image to be JPEG or PNG. No image is silently dropped.
+     * @maxItems 1
+     */
+  additionalPhotos?: PlantIdentificationPhoto[];
 }
 
 export type PlantIdentificationResultStatus = typeof PlantIdentificationResultStatus[keyof typeof PlantIdentificationResultStatus];

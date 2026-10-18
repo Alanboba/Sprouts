@@ -140,8 +140,8 @@ export const getIdentifyPlantUrl = () => {
 }
 
 /**
- * Uses Gemini first and Pl@ntNet as a backup for eligible service failures to conservatively identify a plant photo. Images are processed in memory and are not saved by this API.
- * @summary Identify a plant from a photo
+ * Uses Gemini first and Pl@ntNet as a backup for eligible service failures. An optional close-up must show the same plant. Each image is limited to 1.5 MB decoded (3 MB combined). Images are processed in memory and are not saved by this API. Extra photos do not lower confidence requirements.
+ * @summary Identify a plant from one or two photos
  */
 export const identifyPlant = async (plantIdentificationInput: PlantIdentificationInput, options?: Parameters<typeof customFetch>[1]): Promise<PlantIdentificationResult> => {
 
@@ -207,7 +207,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type IdentifyPlantMutationVariables = {data: BodyType<PlantIdentificationInput>}
 
     /**
- * @summary Identify a plant from a photo
+ * @summary Identify a plant from one or two photos
  */
 export const useIdentifyPlant = <TError = ErrorType<ApiError>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof identifyPlant>>, TError,IdentifyPlantMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}

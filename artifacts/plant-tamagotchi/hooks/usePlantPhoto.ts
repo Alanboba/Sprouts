@@ -16,7 +16,7 @@ interface PlantPhotoValue {
   isLoading: boolean;
   isSaving: boolean;
   error: string | null;
-  pickPhoto: (source?: PlantPhotoSource) => Promise<string | undefined>;
+  pickPhoto: (source?: PlantPhotoSource, options?: { temporary?: boolean }) => Promise<string | undefined>;
   removePhoto: () => Promise<void>;
   removePhotoForPlant: (plantId: string) => Promise<void>;
   restorePhotoForPlant: (plantId: string, photoUri: string) => Promise<void>;
@@ -85,7 +85,7 @@ export function PlantPhotoProvider({ children }: { children: ReactNode }) {
     };
   }, [isReady, photoKey, plants.length]);
 
-  const pickPhoto = useCallback(async (source: PlantPhotoSource = 'library') => {
+  const pickPhoto = useCallback(async (source: PlantPhotoSource = 'library', options?: { temporary?: boolean }) => {
     if (busy.current || isLoading) return;
     setError(null);
 
@@ -175,6 +175,12 @@ export function PlantPhotoProvider({ children }: { children: ReactNode }) {
       const uri = `data:image/jpeg;base64,${encoded.base64}`;
       if (uri.length > MAX_STORED_LENGTH) {
         throw new Error('This photo is too large to save. Please choose a smaller image.');
+      }
+      // Identification close-ups are returned in memory only. They must never
+      // replace the plant's durable profile photo or its empty-profile draft.
+      if (options?.temporary) {
+        if (activePhotoKey.current === photoKey) return uri;
+        return;
       }
       // Commit before changing the preview. A failed replace keeps the old photo.
       try {
