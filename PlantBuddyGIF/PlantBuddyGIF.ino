@@ -2,6 +2,7 @@
 #include <Adafruit_ST7789.h>
 #include <SPI.h>
 #include "plant_healthy.h"
+#include "plant_lovey.h"
 
 #define TFT_CS   5
 #define TFT_DC   16
