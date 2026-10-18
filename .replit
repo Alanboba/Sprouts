@@ -22,4 +22,3 @@ timeoutMs = 20000
 [userenv]
 
 [userenv.shared]
-GEMINI_API_KEY = "AQ.Ab8RN6JYsRz7Icbw4F38WfZA0CJqE5iHMfEPKygT33VgAspxGQ"
