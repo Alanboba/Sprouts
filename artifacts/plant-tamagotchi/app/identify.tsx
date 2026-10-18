@@ -8,7 +8,7 @@ import { usePlantIdentity } from '@/context/PlantIdentityContext';
 import { useColors } from '@/hooks/useColors';
 import { usePlantPhoto } from '@/hooks/usePlantPhoto';
 import * as ImagePicker from 'expo-image-picker';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -45,6 +45,7 @@ function getApiErrorMessage(error: unknown): string {
 }
 
 export default function IdentifyPlantScreen() {
+  const { autoIdentify } = useLocalSearchParams<{ autoIdentify?: string }>();
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { photoUri, isLoading: photoLoading, isSaving, error: photoError, pickPhoto } = usePlantPhoto();
@@ -60,6 +61,8 @@ export default function IdentifyPlantScreen() {
   const scientificInputRef = useRef<TextInput>(null);
   const activeRequest = useRef<AbortController | null>(null);
   const lastAnalysis = useRef<{ photo: string; result: PlantIdentificationResult; expiresAt: number } | null>(null);
+  const routeAutoConsumed = useRef(false);
+  const [cameraAutoRequested, setCameraAutoRequested] = useState(false);
 
   useEffect(() => {
     setResult(null);
@@ -161,7 +164,6 @@ export default function IdentifyPlantScreen() {
 
   const handleTakePhoto = async () => {
     setError(null);
-    setResult(null);
     if (Platform.OS !== 'web' && !cameraPermission?.granted) {
       let permission;
       try {
@@ -182,7 +184,8 @@ export default function IdentifyPlantScreen() {
       }
     }
     setCameraNeedsSettings(false);
-    await pickPhoto('camera');
+    const captured = await pickPhoto('camera');
+    if (captured) setCameraAutoRequested(true);
   };
 
   const handleOpenSettings = async () => {
@@ -252,6 +255,17 @@ export default function IdentifyPlantScreen() {
       }
     }
   };
+
+  useEffect(() => {
+    const fromRoute = autoIdentify === '1' && !routeAutoConsumed.current;
+    if ((!fromRoute && !cameraAutoRequested) || !photoUri || photoLoading || isSaving) return;
+    if (fromRoute) {
+      routeAutoConsumed.current = true;
+      router.setParams({ autoIdentify: undefined });
+    }
+    setCameraAutoRequested(false);
+    void handleIdentify();
+  }, [autoIdentify, cameraAutoRequested, photoUri, photoLoading, isSaving]);
 
   const handleConfirm = async () => {
     if (!result || !commonName.trim()) {
@@ -351,7 +365,7 @@ export default function IdentifyPlantScreen() {
           >
             <Feather name="camera" size={16} color={colors.primaryForeground} />
             <Text style={[styles.photoButtonText, styles.photoButtonTextPrimary]}>
-              Take photo
+              Take & identify
             </Text>
           </Pressable>
           <Pressable

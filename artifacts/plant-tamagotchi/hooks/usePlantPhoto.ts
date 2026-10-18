@@ -16,7 +16,7 @@ interface PlantPhotoValue {
   isLoading: boolean;
   isSaving: boolean;
   error: string | null;
-  pickPhoto: (source?: PlantPhotoSource) => Promise<void>;
+  pickPhoto: (source?: PlantPhotoSource) => Promise<string | undefined>;
   removePhoto: () => Promise<void>;
   removePhotoForPlant: (plantId: string) => Promise<void>;
   restorePhotoForPlant: (plantId: string, photoUri: string) => Promise<void>;
@@ -94,8 +94,18 @@ export function PlantPhotoProvider({ children }: { children: ReactNode }) {
     // do not require broad access to the user's photo library.
     let selection: ImagePicker.ImagePickerResult;
     try {
+      if (source === 'camera' && Platform.OS !== 'web') {
+        const permission = await ImagePicker.requestCameraPermissionsAsync();
+        if (!permission.granted) {
+          setError(permission.canAskAgain
+            ? 'Allow camera access to photograph and identify your plant, or choose an existing photo.'
+            : 'Camera access is off. Enable it in device settings or choose an existing photo.');
+          return;
+        }
+      }
       const options: Parameters<typeof ImagePicker.launchImageLibraryAsync>[0] = {
         mediaTypes: ['images'],
+        cameraType: ImagePicker.CameraType.back,
         allowsEditing: true,
         aspect: [4, 3],
         quality: 1,
@@ -172,7 +182,10 @@ export function PlantPhotoProvider({ children }: { children: ReactNode }) {
       } catch {
         throw new Error('Could not save the photo on this device. Free some space and try again.');
       }
-      if (activePhotoKey.current === photoKey) setPhotoUri(uri);
+      if (activePhotoKey.current === photoKey) {
+        setPhotoUri(uri);
+        return uri;
+      }
     } catch (saveError) {
       setError(
         saveError instanceof Error

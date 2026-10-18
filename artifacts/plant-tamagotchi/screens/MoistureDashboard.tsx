@@ -226,6 +226,13 @@ export default function MoistureDashboard() {
 
   const photoBusy = photoLoading || photoSaving;
 
+  const handleCameraIdentify = async () => {
+    const captured = await pickPhoto('camera');
+    if (captured) {
+      router.push({ pathname: '/identify', params: { autoIdentify: '1' } });
+    }
+  };
+
   return (
     <View style={styles.page}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -415,6 +422,15 @@ export default function MoistureDashboard() {
           )}
         </View>
         {photoError ? <Text style={styles.errorText} accessibilityRole="alert">{photoError}</Text> : null}
+
+        <Pressable accessibilityRole="button" accessibilityLabel="Open camera and identify a plant"
+          disabled={!plantsReady || photoBusy || confirmRemovePlant || isRemovingPlant}
+          onPress={() => void handleCameraIdentify()}
+          style={({ pressed }) => [styles.photoAction, { opacity: !plantsReady || photoBusy || confirmRemovePlant || isRemovingPlant || pressed ? 0.55 : 1 }]}
+          testID="camera-identify-plant">
+          <Feather name="camera" size={16} color={colors.primaryForeground} />
+          <Text style={styles.photoActionText}>Camera & identify</Text>
+        </Pressable>
 
         <Pressable accessibilityRole="button" accessibilityLabel={identity ? `Identify ${identity.commonName} from a photo` : 'Identify a plant from a photo'}
           disabled={!plantsReady || photoBusy || confirmRemovePlant || isRemovingPlant}
