@@ -13,11 +13,11 @@
 
 Adafruit_ST7789 tft(TFT_CS, TFT_DC, TFT_RST);
 const int DRY_THRESHOLD = 2500; // Calibrate using Serial Monitor
-const int SCALE = 5;            // 24x24 source becomes 120x120 on screen
+const int SCALE = 10;            // 24x24 source becomes 120x120 on screen
 const int DISPLAY_W = 240;
 const int DISPLAY_H = 280;
 const int FRAME_DELAY_MS = 200;
-uint16_t scaledLine[120];
+uint16_t scaledLine[240];
 bool previousDryState = false;
 bool firstRun = true;
 
