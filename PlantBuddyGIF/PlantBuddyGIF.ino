@@ -27,11 +27,6 @@ uint16_t scaledLine[240];
 bool previousDryState = false;
 bool firstRun = true;
 
-bool isSoilDry() {
-  int reading = analogRead(SOIL_PIN);
-  return reading <= DRY_THRESHOLD;
-}
-
 void drawFrame(const uint16_t* frame, int width, int height) {
   int drawWidth = width * SCALE;
   int drawHeight = height * SCALE;
