@@ -42,6 +42,7 @@ interface PlantIdentityContextValue {
   saveIdentity: (identity: Omit<PlantIdentity, 'confirmedAt'>) => Promise<void>;
   addPlant: (identity: Pick<PlantIdentity, 'commonName' | 'scientificName'>) => Promise<void>;
   selectPlant: (plantId: string) => Promise<void>;
+  removePlant: (plantId: string) => Promise<void>;
   saveNickname: (plantId: string, nickname: string) => Promise<void>;
   logWatering: () => Promise<void>;
   logSoilCheck: () => Promise<void>;
@@ -79,13 +80,15 @@ function readProfileData(value: unknown): PlantProfilesData | null {
   const entry = value as Record<string, unknown>;
   if (
     !Array.isArray(entry.plants) ||
-    entry.plants.length === 0 ||
     !entry.plants.every(isPlantProfile) ||
     typeof entry.activePlantId !== 'string'
   ) {
     return null;
   }
   const plants = entry.plants as PlantProfile[];
+  if (plants.length === 0) {
+    return entry.activePlantId === '' ? { plants, activePlantId: '' } : null;
+  }
   if (!plants.some((plant) => plant.id === entry.activePlantId)) return null;
   return { plants, activePlantId: entry.activePlantId };
 }
@@ -276,6 +279,21 @@ export function PlantIdentityProvider({ children }: { children: ReactNode }) {
     [data, persist],
   );
 
+  const removePlant = useCallback(
+    async (plantId: string) => {
+      const plantIndex = data.plants.findIndex((plant) => plant.id === plantId);
+      if (plantIndex < 0) throw new Error('That plant could not be found.');
+
+      const plants = data.plants.filter((plant) => plant.id !== plantId);
+      const wasActive = data.activePlantId === plantId;
+      const nextActivePlantId = wasActive
+        ? plants[plantIndex]?.id ?? plants[plantIndex - 1]?.id ?? ''
+        : data.activePlantId;
+      await persist({ plants, activePlantId: nextActivePlantId });
+    },
+    [data, persist],
+  );
+
   const saveNickname = useCallback(
     async (plantId: string, value: string) => {
       const nickname = value.trim();
@@ -337,6 +355,7 @@ export function PlantIdentityProvider({ children }: { children: ReactNode }) {
       saveIdentity,
       addPlant,
       selectPlant,
+      removePlant,
       saveNickname,
       logWatering,
       logSoilCheck,
@@ -349,6 +368,7 @@ export function PlantIdentityProvider({ children }: { children: ReactNode }) {
       saveIdentity,
       addPlant,
       selectPlant,
+      removePlant,
       saveNickname,
       logWatering,
       logSoilCheck,

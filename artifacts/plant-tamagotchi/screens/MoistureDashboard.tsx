@@ -8,7 +8,7 @@ import { useColors } from '@/hooks/useColors';
 import { usePlantIdentity } from '@/context/PlantIdentityContext';
 import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 function dateLabel(timestamp: number | null, includeTime = false) {
   if (!timestamp) return 'Not recorded yet';
@@ -22,9 +22,10 @@ export default function MoistureDashboard() {
   const insets = useSafeAreaInsets();
   const { isReady: sensorReady, sensorHost, sensorConnected, moisturePercent,
     lastReadingAt, refreshSensor } = usePlantCare();
-  const { photoUri, isLoading: photoLoading, isSaving: photoSaving, error: photoError, pickPhoto, removePhoto } = usePlantPhoto();
+  const { photoUri, isLoading: photoLoading, isSaving: photoSaving, error: photoError,
+    pickPhoto, removePhoto, removePhotoForPlant, restorePhotoForPlant } = usePlantPhoto();
   const { identity, plants, isReady: plantsReady, error: plantsError,
-    selectPlant, logWatering, logSoilCheck } = usePlantIdentity();
+    selectPlant, removePlant, logWatering, logSoilCheck } = usePlantIdentity();
   const isReady = sensorReady && plantsReady;
   const lastWateredAt = identity?.lastWateredAt ?? null;
   const lastSoilCheckAt = identity?.lastSoilCheckAt ?? null;
@@ -34,6 +35,10 @@ export default function MoistureDashboard() {
   const [sensorLoading, setSensorLoading] = useState(false);
   const [sensorError, setSensorError] = useState<string | null>(null);
   const [careFeedback, setCareFeedback] = useState<string | null>(null);
+  const [confirmRemovePlant, setConfirmRemovePlant] = useState(false);
+  const [isRemovingPlant, setIsRemovingPlant] = useState(false);
+  const [removePlantError, setRemovePlantError] = useState<string | null>(null);
+  const removeInProgress = useRef(false);
 
   const styles = StyleSheet.create({
     page: { flex: 1, backgroundColor: colors.background },
@@ -56,6 +61,21 @@ export default function MoistureDashboard() {
     profileLabel: { color: colors.mutedForeground, fontFamily: 'DMSans_600SemiBold', fontSize: 11, letterSpacing: 0.4 },
     addPlant: { minHeight: 34, paddingHorizontal: 10, borderRadius: 10, backgroundColor: colors.secondary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 },
     addPlantText: { color: colors.secondaryForeground, fontFamily: 'DMSans_600SemiBold', fontSize: 11 },
+    profileActions: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+    removePlant: { minHeight: 34, paddingHorizontal: 9, borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 },
+    removePlantText: { color: colors.destructive, fontFamily: 'DMSans_600SemiBold', fontSize: 11 },
+    removePanel: { padding: 14, gap: 9, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card },
+    removePanelTitle: { color: colors.foreground, fontFamily: 'DMSans_700Bold', fontSize: 15 },
+    removePanelBody: { color: colors.mutedForeground, fontFamily: 'DMSans_400Regular', fontSize: 12, lineHeight: 18 },
+    removeActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 2 },
+    cancelRemove: { minHeight: 40, minWidth: 84, paddingHorizontal: 12, borderRadius: 10, backgroundColor: colors.secondary, alignItems: 'center', justifyContent: 'center' },
+    confirmRemove: { minHeight: 40, minWidth: 92, paddingHorizontal: 12, borderRadius: 10, backgroundColor: colors.destructive, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+    cancelRemoveText: { color: colors.secondaryForeground, fontFamily: 'DMSans_600SemiBold', fontSize: 12 },
+    confirmRemoveText: { color: colors.destructiveForeground, fontFamily: 'DMSans_600SemiBold', fontSize: 12 },
+    removePlantError: { color: colors.destructive, fontFamily: 'DMSans_500Medium', fontSize: 12, lineHeight: 17 },
+    emptyPlantCard: { padding: 18, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, alignItems: 'center', gap: 8 },
+    emptyPlantTitle: { color: colors.foreground, fontFamily: 'DMSans_700Bold', fontSize: 16, textAlign: 'center' },
+    emptyPlantBody: { color: colors.mutedForeground, fontFamily: 'DMSans_400Regular', fontSize: 12, lineHeight: 18, textAlign: 'center' },
     profileChips: { flexDirection: 'row', gap: 8, paddingRight: 6 },
     profileChip: { minHeight: 38, paddingHorizontal: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
     profileChipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
@@ -113,7 +133,11 @@ export default function MoistureDashboard() {
   const moistureColor = !sensorConnected ? colors.mutedForeground
     : moisturePercent !== null && moisturePercent < 35 ? colors.destructive
       : moisturePercent !== null && moisturePercent >= 70 ? colors.accent : colors.primary;
-  const moistureCopy = sensorConnected && moisturePercent !== null
+  const moistureCopy = !identity
+    ? sensorConnected && moisturePercent !== null
+      ? `Sensor reading is ${moisturePercent}%. Add a plant to start its care log.`
+      : 'Add a plant to start tracking photos and care history.'
+    : sensorConnected && moisturePercent !== null
     ? moisturePercent < 35 ? 'Soil is dry. Water slowly, then let the pot drain.'
       : moisturePercent >= 70 ? 'Soil is still moist. Hold off and let it dry a little.'
         : 'Moisture is in a comfortable range.'
@@ -163,6 +187,43 @@ export default function MoistureDashboard() {
     }
   };
 
+  const handleRemoveCurrentPlant = async () => {
+    if (!identity || removeInProgress.current || photoBusy) return;
+    const plant = identity;
+    const savedPhoto = photoUri;
+    removeInProgress.current = true;
+    setIsRemovingPlant(true);
+    setRemovePlantError(null);
+    let photoRemoved = false;
+    try {
+      await removePhotoForPlant(plant.id);
+      photoRemoved = true;
+      try {
+        await removePlant(plant.id);
+      } catch (deleteError) {
+        if (photoRemoved && savedPhoto) {
+          try {
+            await restorePhotoForPlant(plant.id, savedPhoto);
+          } catch {
+            throw new Error('The plant could not be removed, and its photo could not be restored. Please try uploading the photo again.');
+          }
+        }
+        throw deleteError;
+      }
+      setConfirmRemovePlant(false);
+      setCareFeedback(`${plant.nickname || plant.commonName} was removed.`);
+    } catch (deleteError) {
+      setRemovePlantError(
+        deleteError instanceof Error
+          ? deleteError.message
+          : 'Could not remove this plant. Please try again.',
+      );
+    } finally {
+      removeInProgress.current = false;
+      setIsRemovingPlant(false);
+    }
+  };
+
   const photoBusy = photoLoading || photoSaving;
 
   return (
@@ -174,15 +235,17 @@ export default function MoistureDashboard() {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Edit plant nickname"
-              disabled={!identity}
+              disabled={!identity || confirmRemovePlant || isRemovingPlant}
               onPress={() => router.push('/edit-name')}
               style={({ pressed }) => [styles.nicknameEdit, { opacity: pressed ? 0.65 : 1 }]}
               testID="edit-plant-nickname"
             >
               <Text style={[styles.subtitle, { flexShrink: 1 }]} numberOfLines={2}>
-                {identity ? `${identity.nickname || 'Name'} · ${identity.commonName}` : 'Loading plants…'}
+                {identity
+                  ? `${identity.nickname || 'Name'} · ${identity.commonName}`
+                  : plantsReady ? 'Add a plant to get started' : 'Loading plants…'}
               </Text>
-              <Feather name="edit-2" size={13} color={colors.primary} />
+              {identity ? <Feather name="edit-2" size={13} color={colors.primary} /> : null}
             </Pressable>
           </View>
           <Pressable accessibilityRole="button" accessibilityLabel="Open sensor connection settings"
@@ -195,20 +258,41 @@ export default function MoistureDashboard() {
         <View style={styles.profileChooser}>
           <View style={styles.profileHeading}>
             <Text style={styles.profileLabel}>YOUR PLANTS</Text>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Add another plant"
-              disabled={!plantsReady}
-              onPress={() => router.push('/add-plant')}
-              style={({ pressed }) => [
-                styles.addPlant,
-                { opacity: !plantsReady || pressed ? 0.6 : 1 },
-              ]}
-              testID="add-another-plant"
-            >
-              <Feather name="plus" size={15} color={colors.secondaryForeground} />
-              <Text style={styles.addPlantText}>Add plant</Text>
-            </Pressable>
+            <View style={styles.profileActions}>
+              {identity ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove ${identity.nickname || identity.commonName}`}
+                  disabled={!plantsReady || photoBusy || confirmRemovePlant || isRemovingPlant}
+                  onPress={() => {
+                    setRemovePlantError(null);
+                    setConfirmRemovePlant(true);
+                  }}
+                  style={({ pressed }) => [
+                    styles.removePlant,
+                    { opacity: !plantsReady || photoBusy || isRemovingPlant || pressed ? 0.55 : 1 },
+                  ]}
+                  testID="remove-current-plant"
+                >
+                  <Feather name="trash-2" size={13} color={colors.destructive} />
+                  <Text style={styles.removePlantText}>Remove</Text>
+                </Pressable>
+              ) : null}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={plants.length ? 'Add another plant' : 'Add your first plant'}
+                disabled={!plantsReady || confirmRemovePlant || isRemovingPlant}
+                onPress={() => router.push('/add-plant')}
+                style={({ pressed }) => [
+                  styles.addPlant,
+                  { opacity: !plantsReady || pressed ? 0.6 : 1 },
+                ]}
+                testID="add-another-plant"
+              >
+                <Feather name="plus" size={15} color={colors.secondaryForeground} />
+                <Text style={styles.addPlantText}>Add plant</Text>
+              </Pressable>
+            </View>
           </View>
           <ScrollView
             horizontal
@@ -224,11 +308,12 @@ export default function MoistureDashboard() {
                   accessibilityRole="button"
                   accessibilityState={{ selected }}
                   accessibilityLabel={`${plant.commonName}${selected ? ', selected' : ''}`}
+                  disabled={confirmRemovePlant || isRemovingPlant}
                   onPress={() => void handleSelectPlant(plant.id)}
                   style={({ pressed }) => [
                     styles.profileChip,
                     selected ? styles.profileChipActive : null,
-                    { opacity: pressed ? 0.72 : 1 },
+                    { opacity: confirmRemovePlant || isRemovingPlant ? 0.55 : pressed ? 0.72 : 1 },
                   ]}
                   testID={`plant-profile-${plant.id}`}
                 >
@@ -248,6 +333,53 @@ export default function MoistureDashboard() {
           {plantsError ? <Text style={styles.errorText} accessibilityRole="alert">{plantsError}</Text> : null}
         </View>
 
+        {confirmRemovePlant && identity ? (
+          <View style={styles.removePanel} testID="confirm-remove-plant">
+            <Text style={styles.removePanelTitle}>Remove {identity.nickname || identity.commonName}?</Text>
+            <Text style={styles.removePanelBody}>
+              This permanently deletes this plant’s profile, care history, and saved photo from this device.
+            </Text>
+            {removePlantError ? (
+              <Text style={styles.removePlantError} accessibilityRole="alert">{removePlantError}</Text>
+            ) : null}
+            <View style={styles.removeActions}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => {
+                  setConfirmRemovePlant(false);
+                  setRemovePlantError(null);
+                }}
+                disabled={isRemovingPlant}
+                style={({ pressed }) => [styles.cancelRemove, { opacity: isRemovingPlant || pressed ? 0.6 : 1 }]}
+                testID="cancel-remove-plant"
+              >
+                <Text style={styles.cancelRemoveText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Confirm removal of ${identity.nickname || identity.commonName}`}
+                onPress={() => void handleRemoveCurrentPlant()}
+                disabled={isRemovingPlant || photoBusy}
+                style={({ pressed }) => [styles.confirmRemove, { opacity: isRemovingPlant || photoBusy || pressed ? 0.6 : 1 }]}
+                testID="confirm-remove-current-plant"
+              >
+                {isRemovingPlant ? <Feather name="loader" size={14} color={colors.destructiveForeground} /> : <Feather name="trash-2" size={14} color={colors.destructiveForeground} />}
+                <Text style={styles.confirmRemoveText}>{isRemovingPlant ? 'Removing…' : 'Remove plant'}</Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
+
+        {!identity ? (
+          <View style={styles.emptyPlantCard} testID="empty-plants-state">
+            <Feather name="plus-circle" size={25} color={colors.primary} />
+            <Text style={styles.emptyPlantTitle}>No plants to care for yet</Text>
+            <Text style={styles.emptyPlantBody}>
+              Add a plant to save its photo, moisture checks, and care history here.
+            </Text>
+          </View>
+        ) : (
+          <>
         <View style={styles.photoCard}>
           {photoLoading ? (
             <View style={styles.photoEmpty} accessibilityLabel="Loading saved plant photo">
@@ -266,18 +398,18 @@ export default function MoistureDashboard() {
           </View>
           {photoUri ? (
             <>
-              <Pressable accessibilityRole="button" accessibilityLabel="Replace plant photo" disabled={photoBusy}
-                onPress={() => void pickPhoto()} style={({ pressed }) => [styles.removePhoto, { opacity: photoBusy || pressed ? 0.55 : 1 }]} testID="replace-plant-photo">
+              <Pressable accessibilityRole="button" accessibilityLabel="Replace plant photo" disabled={photoBusy || confirmRemovePlant || isRemovingPlant}
+                onPress={() => void pickPhoto()} style={({ pressed }) => [styles.removePhoto, { opacity: photoBusy || confirmRemovePlant || isRemovingPlant || pressed ? 0.55 : 1 }]} testID="replace-plant-photo">
                 <Feather name="edit-2" size={19} color={colors.primary} />
               </Pressable>
-              <Pressable accessibilityRole="button" accessibilityLabel="Remove plant photo" disabled={photoBusy}
-                onPress={() => void removePhoto()} style={({ pressed }) => [styles.removePhoto, { opacity: photoBusy || pressed ? 0.55 : 1 }]} testID="remove-plant-photo">
+              <Pressable accessibilityRole="button" accessibilityLabel="Remove plant photo" disabled={photoBusy || confirmRemovePlant || isRemovingPlant}
+                onPress={() => void removePhoto()} style={({ pressed }) => [styles.removePhoto, { opacity: photoBusy || confirmRemovePlant || isRemovingPlant || pressed ? 0.55 : 1 }]} testID="remove-plant-photo">
                 <Feather name="trash-2" size={19} color={colors.destructive} />
               </Pressable>
             </>
           ) : (
-            <Pressable accessibilityRole="button" accessibilityLabel="Choose a plant photo" disabled={photoBusy}
-              onPress={() => void pickPhoto()} style={({ pressed }) => [styles.photoAction, { opacity: photoBusy || pressed ? 0.65 : 1 }]} testID="add-plant-photo">
+            <Pressable accessibilityRole="button" accessibilityLabel="Choose a plant photo" disabled={photoBusy || confirmRemovePlant || isRemovingPlant}
+              onPress={() => void pickPhoto()} style={({ pressed }) => [styles.photoAction, { opacity: photoBusy || confirmRemovePlant || isRemovingPlant || pressed ? 0.65 : 1 }]} testID="add-plant-photo">
               <Feather name="image" size={15} color={colors.primaryForeground} />
               <Text style={styles.photoActionText}>{photoSaving ? 'Saving' : 'Choose photo'}</Text>
             </Pressable>
@@ -286,12 +418,15 @@ export default function MoistureDashboard() {
         {photoError ? <Text style={styles.errorText} accessibilityRole="alert">{photoError}</Text> : null}
 
         <Pressable accessibilityRole="button" accessibilityLabel={`Identify ${identity?.commonName ?? 'this plant'} from a photo`}
+          disabled={confirmRemovePlant || isRemovingPlant}
           onPress={() => router.push('/identify')}
-          style={({ pressed }) => [styles.identifyAction, { opacity: pressed ? 0.75 : 1 }]}
+          style={({ pressed }) => [styles.identifyAction, { opacity: confirmRemovePlant || isRemovingPlant || pressed ? 0.55 : 1 }]}
           testID="identify-plant">
           <Feather name="search" size={16} color={colors.secondaryForeground} />
           <Text style={styles.identifyActionText}>Identify this plant</Text>
         </Pressable>
+          </>
+        )}
 
         <View style={styles.moistureCard}>
           <View style={styles.sectionTop}>
@@ -334,6 +469,8 @@ export default function MoistureDashboard() {
           {sensorError ? <Text style={styles.retry} accessibilityRole="alert">{sensorError}</Text> : null}
         </View>
 
+        {identity ? (
+          <>
         <View style={styles.guidanceCard}>
           <Text style={styles.guidanceHeading}>
             {sensorConnected && moisturePercent !== null && moisturePercent < 35 ? 'Time to water'
@@ -355,16 +492,18 @@ export default function MoistureDashboard() {
         </View>
         {lastSoilCheckAt ? <Text style={styles.readingMeta}>Last soil check · {dateLabel(lastSoilCheckAt)}</Text> : null}
         <View style={styles.careActions}>
-          <Pressable accessibilityRole="button" accessibilityLabel={`Log that you watered ${identity?.commonName ?? 'this plant'}`} disabled={!isReady || !identity}
-            onPress={handleWater} style={({ pressed }) => [styles.primaryAction, { opacity: !isReady || pressed ? 0.65 : 1 }]} testID="log-watering">
+          <Pressable accessibilityRole="button" accessibilityLabel={`Log that you watered ${identity?.commonName ?? 'this plant'}`} disabled={!isReady || !identity || confirmRemovePlant || isRemovingPlant}
+            onPress={handleWater} style={({ pressed }) => [styles.primaryAction, { opacity: !isReady || confirmRemovePlant || isRemovingPlant || pressed ? 0.65 : 1 }]} testID="log-watering">
             <Feather name="droplet" size={16} color={colors.primaryForeground} /><Text style={styles.primaryActionText}>Log watering</Text>
           </Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel={`Log that ${identity?.commonName ?? 'this plant'} soil is still damp`} disabled={!isReady || !identity}
-            onPress={handleSoilCheck} style={({ pressed }) => [styles.secondaryAction, { opacity: !isReady || pressed ? 0.65 : 1 }]} testID="log-soil-check">
+          <Pressable accessibilityRole="button" accessibilityLabel={`Log that ${identity?.commonName ?? 'this plant'} soil is still damp`} disabled={!isReady || !identity || confirmRemovePlant || isRemovingPlant}
+            onPress={handleSoilCheck} style={({ pressed }) => [styles.secondaryAction, { opacity: !isReady || confirmRemovePlant || isRemovingPlant || pressed ? 0.65 : 1 }]} testID="log-soil-check">
             <Feather name="check-circle" size={16} color={colors.primary} /><Text style={styles.secondaryActionText}>Still damp</Text>
           </Pressable>
         </View>
         {careFeedback ? <Text style={styles.feedback} accessibilityLiveRegion="polite">{careFeedback}</Text> : null}
+          </>
+        ) : null}
       </ScrollView>
     </View>
   );

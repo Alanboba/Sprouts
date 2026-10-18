@@ -16,16 +16,22 @@ interface PlantPhotoValue {
   error: string | null;
   pickPhoto: (source?: PlantPhotoSource) => Promise<void>;
   removePhoto: () => Promise<void>;
+  removePhotoForPlant: (plantId: string) => Promise<void>;
+  restorePhotoForPlant: (plantId: string, photoUri: string) => Promise<void>;
 }
 
 const PlantPhotoContext = createContext<PlantPhotoValue | null>(null);
 
 export function PlantPhotoProvider({ children }: { children: ReactNode }) {
   const { identity } = usePlantIdentity();
-  const photoKey =
-    identity?.id && identity.id !== 'plant-default'
-      ? `${PHOTO_KEY}:${identity.id}`
-      : PHOTO_KEY;
+  const photoKeyForPlant = useCallback(
+    (plantId: string) =>
+      plantId && plantId !== 'plant-default'
+        ? `${PHOTO_KEY}:${plantId}`
+        : PHOTO_KEY,
+    [],
+  );
+  const photoKey = photoKeyForPlant(identity?.id ?? '');
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -153,9 +159,60 @@ export function PlantPhotoProvider({ children }: { children: ReactNode }) {
     }
   }, [isLoading, photoKey]);
 
+  const removePhotoForPlant = useCallback(
+    async (plantId: string) => {
+      if (busy.current || isLoading) {
+        throw new Error('Wait for the photo to finish loading or saving, then try again.');
+      }
+      busy.current = true;
+      setIsSaving(true);
+      setError(null);
+      try {
+        await AsyncStorage.removeItem(photoKeyForPlant(plantId));
+        if (identity?.id === plantId) setPhotoUri(null);
+      } catch {
+        throw new Error('Could not remove the saved plant photo. Please try again.');
+      } finally {
+        busy.current = false;
+        setIsSaving(false);
+      }
+    },
+    [identity?.id, isLoading, photoKeyForPlant],
+  );
+
+  const restorePhotoForPlant = useCallback(
+    async (plantId: string, uri: string) => {
+      try {
+        await AsyncStorage.setItem(photoKeyForPlant(plantId), uri);
+        if (identity?.id === plantId) setPhotoUri(uri);
+      } catch {
+        throw new Error('Could not restore the saved plant photo.');
+      }
+    },
+    [identity?.id, photoKeyForPlant],
+  );
+
   const value = useMemo(
-    () => ({ photoUri, isLoading, isSaving, error, pickPhoto, removePhoto }),
-    [photoUri, isLoading, isSaving, error, pickPhoto, removePhoto],
+    () => ({
+      photoUri,
+      isLoading,
+      isSaving,
+      error,
+      pickPhoto,
+      removePhoto,
+      removePhotoForPlant,
+      restorePhotoForPlant,
+    }),
+    [
+      photoUri,
+      isLoading,
+      isSaving,
+      error,
+      pickPhoto,
+      removePhoto,
+      removePhotoForPlant,
+      restorePhotoForPlant,
+    ],
   );
 
   return createElement(PlantPhotoContext.Provider, { value }, children);
