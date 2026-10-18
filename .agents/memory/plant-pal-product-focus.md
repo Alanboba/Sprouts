@@ -26,3 +26,9 @@ Keep the photo option available even when there are no saved plant profiles.
 **Why:** After plant removal was added, hiding the photo controls in the empty state made the user report the photo feature missing on both iPhone/Expo Go and Replit preview.
 
 **How to apply:** Verify the empty-profile experience as well as the default plant. A photo chosen before a profile exists should remain available and attach to the first new plant, without sharing photos across plants.
+
+Diagnose photo complaints through the user's complete UI journey before changing the AI integration.
+
+**Why:** Working Gemini requests and successful uploads with a default plant did not rule out a blocked empty-profile journey. Repeated service-only checks missed the UI entry and confirmation steps.
+
+**How to apply:** Reproduce selection, preview, identification access, result rendering, confirmation, and reload in the relevant profile state. Distinguish observed failures from unverified native-device behavior; a successful backend request alone is not proof that the feature works.

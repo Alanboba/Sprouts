@@ -31,6 +31,8 @@ export const IdentifyPlantBody = zod.object({
   "mimeType": zod.enum(['image/jpeg', 'image/png', 'image/webp'])
 })
 
+export const identifyPlantResponseDescriptionMax = 600;
+
 export const identifyPlantResponseConfidenceMin = 0;
 export const identifyPlantResponseConfidenceMax = 1;
 
@@ -40,6 +42,7 @@ export const IdentifyPlantResponse = zod.object({
   "status": zod.enum(['identified', 'uncertain', 'not_plant']),
   "commonName": zod.string(),
   "scientificName": zod.string(),
+  "description": zod.string().max(identifyPlantResponseDescriptionMax).optional().describe('Gemini-generated visual description of an identified plant; omitted when uncertain.'),
   "confidence": zod.number().min(identifyPlantResponseConfidenceMin).max(identifyPlantResponseConfidenceMax).nullable().describe('Gemini\'s estimated confidence (0 to 1); null when no estimate is available.'),
   "message": zod.string()
 })

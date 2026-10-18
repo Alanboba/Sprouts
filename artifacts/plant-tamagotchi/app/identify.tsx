@@ -36,6 +36,11 @@ function getApiErrorMessage(error: unknown): string {
       return (data as { error: string }).error;
     }
   }
+  if (typeof error === 'object' && error !== null && 'status' in error) {
+    const status = (error as { status: number }).status;
+    if (status === 404) return 'The plant identification endpoint was not found. The app owner needs to check the backend connection.';
+    if (status === 413) return 'This photo is too large to upload. Choose a smaller image.';
+  }
   return 'Could not reach the plant identification service. Check your connection and try again.';
 }
 
@@ -43,7 +48,7 @@ export default function IdentifyPlantScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { photoUri, isLoading: photoLoading, isSaving, error: photoError, pickPhoto } = usePlantPhoto();
-  const { identity, isReady: identityReady, saveIdentity } = usePlantIdentity();
+  const { identity, isReady: identityReady, saveIdentity, addPlant } = usePlantIdentity();
   const [cameraPermission, requestCameraPermission] = ImagePicker.useCameraPermissions();
   const [cameraNeedsSettings, setCameraNeedsSettings] = useState(false);
   const [result, setResult] = useState<PlantIdentificationResult | null>(null);
@@ -158,7 +163,14 @@ export default function IdentifyPlantScreen() {
     setError(null);
     setResult(null);
     if (Platform.OS !== 'web' && !cameraPermission?.granted) {
-      const permission = await requestCameraPermission();
+      let permission;
+      try {
+        permission = await requestCameraPermission();
+      } catch {
+        setError('Could not request camera access. Check device permissions or choose an existing photo.');
+        return;
+      }
+      if (!permission) return;
       if (!permission.granted) {
         setCameraNeedsSettings(!permission.canAskAgain);
         setError(
@@ -253,12 +265,18 @@ export default function IdentifyPlantScreen() {
       commonName.trim() === result.commonName &&
       scientificName.trim() === result.scientificName;
     try {
-      await saveIdentity({
+      const entry = {
         commonName,
         scientificName,
         confidence: unchanged ? result.confidence : null,
-      });
-      router.back();
+      };
+      if (identity) {
+        await saveIdentity(entry);
+      } else {
+        await addPlant(entry);
+      }
+      if (router.canGoBack()) router.back();
+      else router.replace('/');
     } catch (saveError) {
       setError(
         saveError instanceof Error
@@ -408,6 +426,9 @@ export default function IdentifyPlantScreen() {
                     : 'Couldn’t identify it confidently'}
                 </Text>
                 <Text style={styles.resultText}>{result.message}</Text>
+                {result.status === 'identified' && result.description ? (
+                  <Text style={styles.resultText} testID="plant-description">{result.description}</Text>
+                ) : null}
                 {result.confidence !== null ? (
                   <Text style={styles.confidence}>
                     Estimated confidence · {Math.round(result.confidence * 100)}%

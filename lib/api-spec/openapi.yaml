@@ -108,6 +108,10 @@ components:
           type: string
         scientificName:
           type: string
+        description:
+          type: string
+          maxLength: 600
+          description: Gemini-generated visual description of an identified plant; omitted when uncertain.
         confidence:
           type: ["number", "null"]
           minimum: 0

@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { usePlantIdentity } from '@/context/PlantIdentityContext';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
+import { Platform } from 'react-native';
 import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 // Keep photos separate from care records so replacing a photo never resets care.
@@ -22,6 +23,10 @@ interface PlantPhotoValue {
 }
 
 const PlantPhotoContext = createContext<PlantPhotoValue | null>(null);
+
+function releasePickerUrl(uri: string | undefined) {
+  if (Platform.OS === 'web' && uri?.startsWith('blob:')) URL.revokeObjectURL(uri);
+}
 
 export function PlantPhotoProvider({ children }: { children: ReactNode }) {
   const { identity, plants, isReady } = usePlantIdentity();
@@ -101,24 +106,38 @@ export function PlantPhotoProvider({ children }: { children: ReactNode }) {
           ? await ImagePicker.launchCameraAsync(options)
           : await ImagePicker.launchImageLibraryAsync(options);
     } catch {
-      setError('Could not open your photo library. Please try again.');
+      setError(source === 'camera'
+        ? 'Could not open the camera. Check camera access or choose an existing photo.'
+        : 'Could not open or read the selected photo. Choose a supported image such as JPEG or PNG and try again.');
       return;
     }
     // Do not mark the chooser itself busy: some web browsers never resolve a
     // canceled file dialog. A subsequent tap must still be able to reopen it.
-    if (selection.canceled || busy.current || activePhotoKey.current !== photoKey) return;
+    if (selection.canceled) return;
     const asset = selection.assets[0];
+    if (busy.current || activePhotoKey.current !== photoKey) {
+      selection.assets.forEach((item) => releasePickerUrl(item.uri));
+      return;
+    }
     if (!asset?.uri) {
       setError('No photo was selected. Please choose an image.');
       return;
     }
     if (asset.fileSize && asset.fileSize > 20 * 1024 * 1024) {
+      releasePickerUrl(asset.uri);
       setError('Choose a photo smaller than 20 MB.');
+      return;
+    }
+    if ((asset.type && asset.type !== 'image') ||
+      (asset.mimeType && !asset.mimeType.startsWith('image/'))) {
+      releasePickerUrl(asset.uri);
+      setError('Choose an image, not a video or document.');
       return;
     }
 
     busy.current = true;
     setIsSaving(true);
+    let encodedUri: string | undefined;
     try {
       // Store a bounded, durable JPEG, not a temporary picker/cache URI.
       // This also keeps native AsyncStorage entries below their size limit.
@@ -129,12 +148,19 @@ export function PlantPhotoProvider({ children }: { children: ReactNode }) {
       );
       const context = ImageManipulator.manipulate(asset.uri);
       context.resize({ width: Math.max(1, Math.round((asset.width || 900) * scale)) });
-      const image = await context.renderAsync();
-      const encoded = await image.saveAsync({
-        format: SaveFormat.JPEG,
-        compress: 0.65,
-        base64: true,
-      });
+      const encoded = await (async () => {
+        try {
+          const image = await context.renderAsync();
+          return await image.saveAsync({
+            format: SaveFormat.JPEG,
+            compress: 0.65,
+            base64: true,
+          });
+        } catch {
+          throw new Error('This image could not be read or converted. Choose a JPEG, PNG, or another photo supported by your device.');
+        }
+      })();
+      encodedUri = encoded.uri;
       if (!encoded.base64) throw new Error('Could not read that photo.');
       const uri = `data:image/jpeg;base64,${encoded.base64}`;
       if (uri.length > MAX_STORED_LENGTH) {
@@ -154,6 +180,8 @@ export function PlantPhotoProvider({ children }: { children: ReactNode }) {
           : 'Could not save that photo. Please try another image.',
       );
     } finally {
+      releasePickerUrl(asset.uri);
+      releasePickerUrl(encodedUri);
       busy.current = false;
       setIsSaving(false);
     }

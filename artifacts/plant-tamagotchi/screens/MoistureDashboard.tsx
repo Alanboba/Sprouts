@@ -375,7 +375,7 @@ export default function MoistureDashboard() {
             <Feather name="plus-circle" size={25} color={colors.primary} />
             <Text style={styles.emptyPlantTitle}>No plants to care for yet</Text>
             <Text style={styles.emptyPlantBody}>
-              Choose a photo below, then add a plant. Your photo will stay with its new profile and care history.
+              Choose a photo below, then identify your plant or add it manually. Your photo will stay with its new profile.
             </Text>
           </View>
         ) : null}
@@ -416,14 +416,14 @@ export default function MoistureDashboard() {
         </View>
         {photoError ? <Text style={styles.errorText} accessibilityRole="alert">{photoError}</Text> : null}
 
-        {identity ? <Pressable accessibilityRole="button" accessibilityLabel={`Identify ${identity.commonName} from a photo`}
-          disabled={confirmRemovePlant || isRemovingPlant}
+        <Pressable accessibilityRole="button" accessibilityLabel={identity ? `Identify ${identity.commonName} from a photo` : 'Identify a plant from a photo'}
+          disabled={!plantsReady || photoBusy || confirmRemovePlant || isRemovingPlant}
           onPress={() => router.push('/identify')}
-          style={({ pressed }) => [styles.identifyAction, { opacity: confirmRemovePlant || isRemovingPlant || pressed ? 0.55 : 1 }]}
+          style={({ pressed }) => [styles.identifyAction, { opacity: !plantsReady || photoBusy || confirmRemovePlant || isRemovingPlant || pressed ? 0.55 : 1 }]}
           testID="identify-plant">
           <Feather name="search" size={16} color={colors.secondaryForeground} />
           <Text style={styles.identifyActionText}>Identify this plant</Text>
-        </Pressable> : null}
+        </Pressable>
 
         <View style={styles.moistureCard}>
           <View style={styles.sectionTop}>

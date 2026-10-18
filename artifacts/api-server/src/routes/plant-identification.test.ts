@@ -22,6 +22,47 @@ test("identification accepts a complete high-confidence plant match", () => {
   assert.equal(result.confidence, 0.93);
 });
 
+test("generated descriptions are bounded and only shown for confident identifications", () => {
+  const input = {
+    status: "identified",
+    commonName: "Pothos",
+    scientificName: "Epipremnum aureum",
+    confidence: 0.95,
+    description: " Bright, heart-shaped leaves on trailing stems. ",
+  };
+  assert.equal(normalizeGeminiIdentification(input).description, input.description.trim());
+  assert.equal(normalizeGeminiIdentification({ ...input, description: "x".repeat(900) }).description?.length, 600);
+  assert.equal(normalizeGeminiIdentification({ ...input, confidence: 0.2 }).description, undefined);
+  assert.equal(normalizeGeminiIdentification({ ...input, status: "not_plant" }).description, undefined);
+  assert.equal(normalizeGeminiIdentification({ ...input, description: undefined }).description, undefined);
+});
+
+test("Google invalid-key, invalid-image, configuration and exhausted-quota errors are distinct and safe", async () => {
+  const cases = [
+    { status: 400, error: { message: "API key not valid", details: [{ reason: "API_KEY_INVALID" }] }, expected: /credentials|permissions/i },
+    { status: 400, error: { message: "Could not decode image" }, expected: /image/i },
+    { status: 400, error: { message: "Invalid response schema" }, expected: /request configuration/i },
+    { status: 429, error: { details: [{ violations: [{ quotaId: "RequestsPerDay", quotaValue: "0" }] }] }, expected: /quota.*exhausted/i },
+  ];
+  for (const entry of cases) {
+    let calls = 0;
+    const fetcher: typeof fetch = async () => {
+      calls++;
+      return new Response(JSON.stringify({ error: entry.error }), { status: entry.status });
+    };
+    await assert.rejects(
+      identifyPlantWithGemini({ imageBase64: "test", mimeType: "image/jpeg" }, "test-key", fetcher),
+      (error: unknown) => {
+        assert.ok(error instanceof GeminiServiceError);
+        assert.match(error.message, entry.expected);
+        assert.equal(error.message.includes("test-key"), false);
+        return true;
+      },
+    );
+    assert.equal(calls, 1);
+  }
+});
+
 test("low confidence suppresses candidate names and asks for a clearer image", () => {
   const result = normalizeGeminiIdentification({
     status: "identified",

@@ -40,7 +40,7 @@ interface PlantIdentityContextValue {
   isReady: boolean;
   error: string | null;
   saveIdentity: (identity: Omit<PlantIdentity, 'confirmedAt'>) => Promise<void>;
-  addPlant: (identity: Pick<PlantIdentity, 'commonName' | 'scientificName'>) => Promise<void>;
+  addPlant: (identity: Pick<PlantIdentity, 'commonName' | 'scientificName'> & Partial<Pick<PlantIdentity, 'confidence'>>) => Promise<void>;
   selectPlant: (plantId: string) => Promise<void>;
   removePlant: (plantId: string) => Promise<void>;
   saveNickname: (plantId: string, nickname: string) => Promise<void>;
@@ -247,7 +247,7 @@ export function PlantIdentityProvider({ children }: { children: ReactNode }) {
   );
 
   const addPlant = useCallback(
-    async (entry: Pick<PlantIdentity, 'commonName' | 'scientificName'>) => {
+    async (entry: Pick<PlantIdentity, 'commonName' | 'scientificName'> & Partial<Pick<PlantIdentity, 'confidence'>>) => {
       const commonName = entry.commonName.trim().slice(0, 100);
       if (!commonName) throw new Error('Enter a common plant name first.');
       const id = `plant-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -255,7 +255,9 @@ export function PlantIdentityProvider({ children }: { children: ReactNode }) {
         id,
         commonName,
         scientificName: entry.scientificName.trim().slice(0, 120),
-        confidence: null,
+        confidence: typeof entry.confidence === 'number' &&
+          Number.isFinite(entry.confidence) && entry.confidence >= 0 && entry.confidence <= 1
+          ? entry.confidence : null,
         confirmedAt: Date.now(),
         lastWateredAt: null,
         lastSoilCheckAt: null,

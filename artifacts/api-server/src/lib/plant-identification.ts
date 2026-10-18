@@ -103,6 +103,9 @@ export function normalizeGeminiIdentification(
     status: "identified",
     commonName,
     scientificName,
+    ...(typeof result.description === "string" && result.description.trim()
+      ? { description: cleanName(result.description, 600) }
+      : {}),
     confidence,
     message: "Likely match. Confirm the name or edit it before saving.",
   });
@@ -168,6 +171,7 @@ export async function identifyPlantWithGemini(
                     "Return status 'identified' only when a single plant is clearly visible and you can identify both its common and scientific names with at least 70% estimated confidence.",
                     "For a blurry, distant, obstructed, ambiguous, non-plant, or multi-plant image, do not guess or list candidate species. Return status 'uncertain' or 'not_plant' and leave both names empty.",
                     "If available, give an estimated confidence as a number from 0 to 1; omit it when you cannot estimate reliably.",
+                     "For an identified plant, also return description: one or two short sentences describing visible leaf shape, color, and growth habit. Base this only on the photo; do not invent plant health, sensor readings, or watering instructions. For uncertain or non-plant images, omit description.",
                   ].join(" "),
                 },
               ],
@@ -185,6 +189,7 @@ export async function identifyPlantWithGemini(
                 },
                 commonName: { type: "STRING" },
                 scientificName: { type: "STRING" },
+                 description: { type: "STRING" },
                 confidence: { type: "NUMBER" },
               },
               required: ["status", "commonName", "scientificName"],
@@ -196,9 +201,13 @@ export async function identifyPlantWithGemini(
         // Never forward Google's raw error (which can contain request details
         // or credentials). Read it only to classify exhausted quota.
         const payload = await response.json().catch(() => null) as {
-          error?: { details?: unknown };
+          error?: { details?: unknown; message?: string };
         } | null;
         const details = payload?.error?.details;
+        const invalidKey = response.status === 400 && (
+          (Array.isArray(details) && details.some((detail) => detail?.reason === "API_KEY_INVALID")) ||
+          /API.key.not.valid|invalid.API.key/i.test(payload?.error?.message ?? "")
+        );
         const exhaustedQuota = Array.isArray(details) && details.some((detail) =>
           Array.isArray(detail?.violations) && detail.violations.some((violation: { quotaId?: string; quotaValue?: string } | null) =>
             /perday/i.test(violation?.quotaId ?? "") || violation?.quotaValue === "0"));
@@ -210,13 +219,17 @@ export async function identifyPlantWithGemini(
           : 600;
         const transient = [429, 500, 502, 503, 504].includes(response.status);
         const message = response.status === 429
-          ? "Gemini's rate limit or quota was reached. Wait a while before trying again."
-          : [401, 403].includes(response.status)
+          ? exhaustedQuota
+            ? "Gemini's available quota is exhausted. The app owner needs to check Google project quota and billing."
+            : "Gemini's rate limit or quota was reached. Wait a while before trying again."
+          : invalidKey || [401, 403].includes(response.status)
             ? "Gemini rejected the server credentials or access permissions. The app owner needs to check the server configuration."
             : response.status === 404
               ? "The configured Gemini model is unavailable. The app owner needs to check the server configuration."
               : response.status === 400
-                ? "Gemini could not read this image. Choose another plant photo."
+                ? /image|mime|decode/i.test(payload?.error?.message ?? "")
+                  ? "Gemini could not read this image. Choose another plant photo."
+                  : "Gemini rejected the analysis request. The app owner needs to check the server request configuration."
                 : "Gemini is temporarily unavailable. Please try again shortly.";
         throw new GeminiServiceError(
           message, response.status,
