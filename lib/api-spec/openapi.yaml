@@ -31,7 +31,7 @@ paths:
       operationId: identifyPlant
       tags: [plants]
       summary: Identify a plant from a photo
-      description: Uses Gemini to conservatively identify a plant photo. Images are processed in memory and are not saved by the API.
+      description: Uses Gemini first and Pl@ntNet as a backup for eligible service failures to conservatively identify a plant photo. Images are processed in memory and are not saved by this API.
       requestBody:
         required: true
         content:
@@ -64,13 +64,19 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiError"
         "502":
-          description: Gemini returned an unusable response
+          description: Identification providers returned an unusable response
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
         "503":
-          description: Gemini is not configured or temporarily unavailable
+          description: Identification is not configured or the providers are unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "504":
+          description: Identification exceeded its bounded time limit
           content:
             application/json:
               schema:
@@ -111,12 +117,12 @@ components:
         description:
           type: string
           maxLength: 600
-          description: Gemini-generated visual description of an identified plant; omitted when uncertain.
+          description: Gemini-generated visual description of an identified plant; omitted when uncertain or when Pl@ntNet supplies the identification.
         confidence:
           type: ["number", "null"]
           minimum: 0
           maximum: 1
-          description: Gemini's estimated confidence (0 to 1); null when no estimate is available.
+          description: Provider's estimated confidence or identification score (0 to 1); null when unavailable. This is not a guarantee.
         message:
           type: string
       required: [status, commonName, scientificName, confidence, message]

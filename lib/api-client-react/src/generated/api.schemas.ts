@@ -42,12 +42,12 @@ export interface PlantIdentificationResult {
   commonName: string;
   scientificName: string;
   /**
-     * Gemini-generated visual description of an identified plant; omitted when uncertain.
+     * Gemini-generated visual description of an identified plant; omitted when uncertain or when Pl@ntNet supplies the identification.
      * @maxLength 600
      */
   description?: string;
   /**
-     * Gemini's estimated confidence (0 to 1); null when no estimate is available.
+     * Provider's estimated confidence or identification score (0 to 1); null when unavailable. This is not a guarantee.
      * @minimum 0
      * @maximum 1
      * @nullable

@@ -140,7 +140,7 @@ export const getIdentifyPlantUrl = () => {
 }
 
 /**
- * Uses Gemini to conservatively identify a plant photo. Images are processed in memory and are not saved by the API.
+ * Uses Gemini first and Pl@ntNet as a backup for eligible service failures to conservatively identify a plant photo. Images are processed in memory and are not saved by this API.
  * @summary Identify a plant from a photo
  */
 export const identifyPlant = async (plantIdentificationInput: PlantIdentificationInput, options?: Parameters<typeof customFetch>[1]): Promise<PlantIdentificationResult> => {

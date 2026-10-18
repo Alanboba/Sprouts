@@ -3,6 +3,7 @@ import {
   type PlantIdentificationInput,
   type PlantIdentificationResult,
 } from "@workspace/api-zod";
+import { IdentificationServiceError, type IdentificationFailure } from "./identification-provider";
 
 // Flash 3.8 authenticated successfully but repeatedly hung on generateContent.
 // Use the vision-capable low-latency model verified against the current API.
@@ -35,14 +36,15 @@ function safeTransportCode(error: unknown): string | undefined {
   ].includes(code) ? code : undefined;
 }
 
-export class GeminiServiceError extends Error {
+export class GeminiServiceError extends IdentificationServiceError {
   constructor(
     message: string,
-    readonly upstreamStatus: number,
-    readonly retryable = false,
-    readonly retryAfterMs = 600,
+    upstreamStatus: number,
+    retryable = false,
+    retryAfterMs = 600,
+    category: IdentificationFailure = "configuration",
   ) {
-    super(message);
+    super(message, upstreamStatus, category, retryable, retryAfterMs);
     this.name = "GeminiServiceError";
   }
 }
@@ -164,6 +166,7 @@ export async function identifyPlantWithGemini(
     totalTimeoutMs?: number;
     sleep?: (ms: number) => Promise<void>;
     onAttempt?: (event: GeminiAttemptEvent) => void;
+    signal?: AbortSignal;
   } = {},
 ): Promise<PlantIdentificationResult> {
   const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
@@ -175,7 +178,7 @@ export async function identifyPlantWithGemini(
     const attemptStarted = Date.now();
     const remaining = deadline - attemptStarted;
     if (remaining <= 0) {
-      throw new GeminiServiceError("Gemini took too long to analyze this photo. Please try again shortly; your photo is still saved.", 504);
+      throw new GeminiServiceError("Gemini took too long to analyze this photo. Please try again shortly; your photo is still saved.", 504, false, 600, "timeout");
     }
     let stage: GeminiAttemptEvent["stage"] = "waiting_for_response";
     let status: number | undefined;
@@ -186,6 +189,9 @@ export async function identifyPlantWithGemini(
         ...(status !== undefined ? { status } : {}), ...extra,
       });
     const controller = new AbortController();
+    const abort = () => controller.abort();
+    options.signal?.addEventListener("abort", abort, { once: true });
+    if (options.signal?.aborted) controller.abort();
     const timeout = setTimeout(() => controller.abort(),
       Math.min(options.attemptTimeoutMs ?? GEMINI_ATTEMPT_TIMEOUT_MS, remaining));
     let failure: GeminiServiceError;
@@ -284,10 +290,18 @@ export async function identifyPlantWithGemini(
                 : response.status === 503
                   ? "Gemini is currently busy or unavailable. Please try again shortly; your photo is still saved."
                   : "Gemini is temporarily unavailable. Please try again shortly.";
+        const category: IdentificationFailure = response.status === 429
+          ? exhaustedQuota ? "quota" : "rate_limit"
+          : invalidKey || [401, 403].includes(response.status) ? "credentials"
+            : response.status === 400
+              ? /image|mime|decode/i.test(payload?.error?.message ?? "") ? "invalid_image" : "configuration"
+              : response.status === 415 ? "unsupported_input"
+                : [500, 502, 503, 504].includes(response.status) ? "unavailable" : "configuration";
         throw new GeminiServiceError(
           message, response.status,
           transient && !exhaustedQuota && Number.isFinite(retryMs) && retryMs <= 2_000,
           Math.max(600, retryMs || 600),
+          category,
         );
       }
       const payload: unknown = await response.json();
@@ -295,13 +309,13 @@ export async function identifyPlantWithGemini(
       stage = "parsing_response";
       const text = extractCandidateText(payload);
       if (!text) {
-        throw new GeminiServiceError("Gemini returned no analysis. Please choose another photo or try again.", 502);
+        throw new GeminiServiceError("Gemini returned no analysis. Please choose another photo or try again.", 502, false, 600, "invalid_response");
       }
       let modelResult: unknown;
       try {
         modelResult = JSON.parse(text);
       } catch {
-        throw new GeminiServiceError("Gemini returned an incomplete analysis. Please try again.", 502);
+        throw new GeminiServiceError("Gemini returned an incomplete analysis. Please try again.", 502, false, 600, "invalid_response");
       }
       const result = normalizeGeminiIdentification(modelResult);
       emit("completed");
@@ -310,10 +324,10 @@ export async function identifyPlantWithGemini(
       failure = error instanceof GeminiServiceError
         ? error
         : controller.signal.aborted
-          ? new GeminiServiceError("Gemini took too long to analyze this photo. Please try again shortly; your photo is still saved.", 504, true)
+          ? new GeminiServiceError("Gemini took too long to analyze this photo. Please try again shortly; your photo is still saved.", 504, true, 600, "timeout")
           : error instanceof SyntaxError
-            ? new GeminiServiceError("Gemini returned an unreadable analysis. Please try again.", 502)
-            : new GeminiServiceError("Could not connect to Gemini. Please try again shortly.", 503, true);
+            ? new GeminiServiceError("Gemini returned an unreadable analysis. Please try again.", 502, false, 600, "invalid_response")
+            : new GeminiServiceError("Could not connect to Gemini. Please try again shortly.", 503, true, 600, "transport");
       emit("failed", {
         failureKind: controller.signal.aborted ? "timeout"
           : error instanceof GeminiServiceError ? stage === "parsing_response" ? "parse" : "provider"
@@ -322,8 +336,9 @@ export async function identifyPlantWithGemini(
       });
     } finally {
       clearTimeout(timeout);
+      options.signal?.removeEventListener("abort", abort);
     }
-    if (!failure.retryable || attempt === 1 || deadline - Date.now() <= failure.retryAfterMs) throw failure;
+    if (!failure.retryable || attempt === 1 || options.signal?.aborted || deadline - Date.now() <= failure.retryAfterMs) throw failure;
     emit("retry_scheduled", { retryDelayMs: failure.retryAfterMs });
     await sleep(failure.retryAfterMs);
   }

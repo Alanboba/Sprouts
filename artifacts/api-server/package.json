@@ -8,7 +8,8 @@
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx --test src/routes/plant-identification.test.ts"
+    "test": "tsx --test src/routes/plant-identification.test.ts src/lib/identify-plant.test.ts",
+    "test:identify:live": "tsx src/scripts/check-identification.ts"
   },
   "dependencies": {
     "@workspace/api-zod": "workspace:*",

@@ -4,11 +4,9 @@ import {
   type PlantIdentificationInput,
 } from "@workspace/api-zod";
 import { Router, type IRouter, type Request } from "express";
-import {
-  GeminiServiceError,
-  isPlantImage,
-  identifyPlantWithGemini,
-} from "../lib/plant-identification";
+import { isPlantImage } from "../lib/plant-identification";
+import { identifyPlant } from "../lib/identify-plant";
+import { IdentificationServiceError } from "../lib/identification-provider";
 import { createIdentificationCache } from "../lib/plant-identification-cache";
 
 const router: IRouter = Router();
@@ -87,6 +85,7 @@ router.post("/plants/identify", async (req, res): Promise<void> => {
   }
 
   const apiKey = process.env["GEMINI_API_KEY"]?.trim();
+  const plantnetKey = process.env["PLANTNET_API_KEY"]?.trim();
   if (!apiKey) {
     res.status(503).json({
       error: "Plant identification is not configured on the server yet.",
@@ -97,16 +96,17 @@ router.post("/plants/identify", async (req, res): Promise<void> => {
   try {
     const clientKey = getClientKey(req);
     req.log.info({ imageBytes: bytes.length, mimeType: input.mimeType }, "Plant identification image received");
-    const result = await identifyCached(input, clientKey, apiKey, async () => {
+    const keys = { gemini: apiKey, plantnet: plantnetKey };
+    const result = await identifyCached(input, clientKey, keys, async () => {
       const retryAfter = takeRateLimitToken(clientKey, Date.now());
       if (retryAfter !== null) {
-        throw new GeminiServiceError(
+        throw new IdentificationServiceError(
           "Too many identification attempts. Please wait a few minutes and try again.",
-          429, false, retryAfter * 1000,
+          429, "app_limit", false, retryAfter * 1000,
         );
       }
-      return identifyPlantWithGemini(input, apiKey, fetch, {
-        onAttempt: (event) => req.log.info(event, "Plant identification Gemini attempt"),
+      return identifyPlant(input, keys, {
+        onEvent: (event) => req.log.info(event, "Plant identification provider attempt"),
       });
     }, (cacheState) => {
       res.setHeader("X-Plant-Analysis-Cache", cacheState);
@@ -116,25 +116,25 @@ router.post("/plants/identify", async (req, res): Promise<void> => {
     res.json(IdentifyPlantResponse.parse(result));
   } catch (error) {
     const message =
-      error instanceof GeminiServiceError
+      error instanceof IdentificationServiceError
         ? error.message
         : "Plant identification is temporarily unavailable. Please try again.";
     req.log.error(
       {
         // Log safe classifications, not raw fetch errors or request images.
-        ...(error instanceof GeminiServiceError
-          ? { upstreamStatus: error.upstreamStatus }
+        ...(error instanceof IdentificationServiceError
+          ? { upstreamStatus: error.upstreamStatus, category: error.category }
           : {}),
       },
       "Plant identification request failed",
     );
-    const status = error instanceof GeminiServiceError
+    const status = error instanceof IdentificationServiceError
       ? error.upstreamStatus === 429 ? 429
         : error.upstreamStatus === 400 ? 400
           : error.upstreamStatus === 504 ? 504
             : error.upstreamStatus === 502 ? 502 : 503
       : 503;
-    if (status === 429 && error instanceof GeminiServiceError) {
+    if (status === 429 && error instanceof IdentificationServiceError) {
       res.setHeader("Retry-After", String(Math.max(1, Math.ceil(error.retryAfterMs / 1000))));
     }
     res.status(status).json({ error: message });

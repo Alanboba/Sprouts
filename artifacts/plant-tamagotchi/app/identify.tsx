@@ -320,8 +320,8 @@ export default function IdentifyPlantScreen() {
         <View style={styles.header}>
           <Text style={styles.title}>Identify a plant</Text>
           <Text style={styles.intro}>
-            Take a clear photo or choose one from your library. Gemini will make
-            a suggestion for you to review.
+            Take a clear photo or choose one from your library. Gemini identifies
+            it first, with Pl@ntNet as a backup when the service is unavailable.
           </Text>
         </View>
 
@@ -412,7 +412,7 @@ export default function IdentifyPlantScreen() {
               <Feather name="search" size={16} color={colors.primaryForeground} />
             )}
             <Text style={styles.actionText}>
-              {isIdentifying ? 'Checking the photo…' : 'Identify with Gemini'}
+              {isIdentifying ? 'Checking the photo…' : 'Identify plant'}
             </Text>
           </Pressable>
         ) : null}
@@ -524,8 +524,8 @@ export default function IdentifyPlantScreen() {
         ) : null}
 
         <Text style={styles.privacy}>
-          The image is sent securely to Gemini and is not saved by the API. A
-          copy of your plant photo is kept on this device.
+          Your photo is sent securely to Gemini, or to Pl@ntNet if a backup is
+          needed. It is not saved by this app’s backend. A copy stays on this device.
         </Text>
       </KeyboardAwareScrollViewCompat>
     </View>

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { PlantIdentificationInput, PlantIdentificationResult } from "@workspace/api-zod";
-import { GeminiServiceError } from "./plant-identification";
+import { IdentificationServiceError } from "./identification-provider";
 
 export type IdentificationCacheState = "hit" | "shared" | "miss";
 
@@ -11,12 +11,12 @@ export function createIdentificationCache() {
   return async (
     input: PlantIdentificationInput,
     scope: string,
-    apiKey: string,
+    providerConfiguration: string | { gemini: string; plantnet?: string },
     analyze: () => Promise<PlantIdentificationResult>,
     onCache?: (state: IdentificationCacheState) => void,
   ): Promise<PlantIdentificationResult> => {
     const hash = createHash("sha256")
-      .update(JSON.stringify([scope, apiKey, input.mimeType, input.imageBase64]))
+      .update(JSON.stringify([scope, providerConfiguration, input.mimeType, input.imageBase64]))
       .digest("hex");
     const cached = results.get(hash);
     if (cached && cached.expiresAt > Date.now()) {
@@ -29,7 +29,7 @@ export function createIdentificationCache() {
     }
     onCache?.("miss");
     if (pending.size >= 16) {
-      throw new GeminiServiceError("Plant identification is busy. Please try again shortly.", 503);
+      throw new IdentificationServiceError("Plant identification is busy. Please try again shortly.", 503, "app_limit");
     }
     const request = Promise.resolve().then(analyze).then((result) => {
       for (const [key, value] of results) {

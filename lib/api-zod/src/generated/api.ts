@@ -18,7 +18,7 @@ export const HealthCheckResponse = zod.object({
 
 
 /**
- * Uses Gemini to conservatively identify a plant photo. Images are processed in memory and are not saved by the API.
+ * Uses Gemini first and Pl@ntNet as a backup for eligible service failures to conservatively identify a plant photo. Images are processed in memory and are not saved by this API.
  * @summary Identify a plant from a photo
  */
 export const identifyPlantBodyImageBase64Min = 40;
@@ -42,8 +42,8 @@ export const IdentifyPlantResponse = zod.object({
   "status": zod.enum(['identified', 'uncertain', 'not_plant']),
   "commonName": zod.string(),
   "scientificName": zod.string(),
-  "description": zod.string().max(identifyPlantResponseDescriptionMax).optional().describe('Gemini-generated visual description of an identified plant; omitted when uncertain.'),
-  "confidence": zod.number().min(identifyPlantResponseConfidenceMin).max(identifyPlantResponseConfidenceMax).nullable().describe('Gemini\'s estimated confidence (0 to 1); null when no estimate is available.'),
+  "description": zod.string().max(identifyPlantResponseDescriptionMax).optional().describe('Gemini-generated visual description of an identified plant; omitted when uncertain or when Pl@ntNet supplies the identification.'),
+  "confidence": zod.number().min(identifyPlantResponseConfidenceMin).max(identifyPlantResponseConfidenceMax).nullable().describe('Provider\'s estimated confidence or identification score (0 to 1); null when unavailable. This is not a guarantee.'),
   "message": zod.string()
 })
 
