@@ -76,7 +76,7 @@ void setup() {
 void loop() {
   bool dry = isSoilDry();
   int moisture = analogRead(SOIL_PIN);
-  int percentage = map(moisture, 3200, WATER_VAL, 0, 100);
+  int percentage = constrain(map(moisture, 3200, WATER_VAL, 0, 100), 0, 100);
   delay(500);
   Serial.println(percentage);
   if (firstRun || dry != previousDryState) {
