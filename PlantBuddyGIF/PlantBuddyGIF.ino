@@ -3,6 +3,7 @@
 #include <SPI.h>
 #include "plant_frames.h"
 #include "plant_lovey.h"
+#include "plant_lotswater.h"
 
 #define TFT_CS   5
 #define TFT_DC   16
@@ -13,6 +14,7 @@
 
 Adafruit_ST7789 tft(TFT_CS, TFT_DC, TFT_RST);
 const int DRY_THRESHOLD = 2500; // Calibrate using Serial Monitor
+const int WATER_VAL = 1590;
 const int SCALE = 10;            // 24x24 source becomes 120x120 on screen
 const int DISPLAY_W = 240;
 const int DISPLAY_H = 280;
@@ -23,10 +25,6 @@ bool firstRun = true;
 
 bool isSoilDry() {
   int reading = analogRead(SOIL_PIN);
-
-  Serial.print("Soil moisture reading: ");
-  Serial.println(reading);
-
   return reading <= DRY_THRESHOLD;
 }
 
@@ -73,11 +71,16 @@ void setup() {
 
 void loop() {
   bool dry = isSoilDry();
+  int moisture = analogRead(SOIL_PIN);
+  int percentage = map(moisture, 3200, WATER_VAL, 0, 100);
+  delay(500);
+  Serial.println(percentage);
   if (firstRun || dry != previousDryState) {
     tft.fillScreen(0xE6F8);
     previousDryState = dry;
     firstRun = false;
   }
-  if (dry) playAnimation(plantFrames, PLANT_FRAME_W, PLANT_FRAME_H, true);
-  else playAnimation(plantLovelyFrames, LOVELY_FRAME_W, LOVELY_FRAME_H, false);
+  if (percentage >= 80) playAnimation(plantLotsWaterFrames, LOTSWATER_FRAME_W, LOTSWATER_FRAME_H, true);
+  else if (percentage >= 65) playAnimation(plantLovelyFrames, LOVELY_FRAME_W, LOVELY_FRAME_H, true);
+  else if (percentage >= 45) playAnimation(plantFrames, PLANT_FRAME_W, PLANT_FRAME_H, true);
 }
