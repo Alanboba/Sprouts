@@ -5,6 +5,9 @@
 #include "plant_lovey.h"
 #include "plant_lotswater.h"
 #include "plant_littlewater.h"
+#include "plant_wobbling.h"
+#include "plant_almostdead.h"
+#include "plant_dead.h"
 
 #define TFT_CS   5
 #define TFT_DC   16
@@ -81,8 +84,11 @@ void loop() {
     previousDryState = dry;
     firstRun = false;
   }
-  if (percentage >= 80) playAnimation(plantLotsWaterFrames, LOTSWATER_FRAME_W, LOTSWATER_FRAME_H, true);
-  else if (percentage >= 65) playAnimation(plantLovelyFrames, LOVELY_FRAME_W, LOVELY_FRAME_H, true);
-  else if (percentage >= 45) playAnimation(plantFrames, PLANT_FRAME_W, PLANT_FRAME_H, true);
-  else if (percentage < 30) playAnimation(plantLittleWaterFrames, LITTLEWATER_FRAME_W, LITTLEWATER_FRAME_H, true);
+  if (percentage > 80) playAnimation(plantLotsWaterFrames, LOTSWATER_FRAME_W, LOTSWATER_FRAME_H, true);
+  else if (percentage > 65) playAnimation(plantLovelyFrames, LOVELY_FRAME_W, LOVELY_FRAME_H, true);
+  else if (percentage > 45) playAnimation(plantFrames, PLANT_FRAME_W, PLANT_FRAME_H, true);
+  else if (percentage > 30) playAnimation(plantLittleWaterFrames, LITTLEWATER_FRAME_W, LITTLEWATER_FRAME_H, true);
+  else if (percentage > 20) playAnimation(plantWobblingFrames, WOBBLING_FRAME_W, WOBBLING_FRAME_H, true);
+  else if (percentage > 5)  playAnimation(plantAlmostDeadFrames, ALMOSTDEAD_FRAME_W, ALMOSTDEAD_FRAME_H, true);
+  else if (percentage < 5) playAnimation(plantDeadFrames, PLANT_DEAD_FRAME_W, PLANT_DEAD_FRAME_H, true);
 }
