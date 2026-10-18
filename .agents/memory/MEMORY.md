@@ -1,1 +1,3 @@
 - [Plant Pal product focus](plant-pal-product-focus.md) — prioritize moisture and user photos over ornamental journal styling; photos are device-local unless scope changes.
+- [Gemini availability checks](gemini-availability.md) — successful authentication/model discovery does not prove image generation works; test the actual vision request.
+- [Orphaned development servers](orphaned-development-servers.md) — managed restarts can leave old child servers listening; verify listener ownership before restarting again.

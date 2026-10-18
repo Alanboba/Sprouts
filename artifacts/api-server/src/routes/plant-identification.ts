@@ -9,12 +9,14 @@ import {
   isPlantImage,
   identifyPlantWithGemini,
 } from "../lib/plant-identification";
+import { createIdentificationCache } from "../lib/plant-identification-cache";
 
 const router: IRouter = Router();
 const MAX_IMAGE_BYTES = 1_500_000;
 const WINDOW_MS = 15 * 60 * 1000;
 const MAX_REQUESTS_PER_WINDOW = 12;
 const requestsByClient = new Map<string, number[]>();
+const identifyCached = createIdentificationCache();
 
 function getClientKey(req: Request): string {
   const forwarded = req
@@ -83,15 +85,6 @@ router.post("/plants/identify", async (req, res): Promise<void> => {
     return;
   }
 
-  const retryAfter = takeRateLimitToken(getClientKey(req), Date.now());
-  if (retryAfter !== null) {
-    res.setHeader("Retry-After", String(retryAfter));
-    res.status(429).json({
-      error: "Too many identification attempts. Please wait a few minutes and try again.",
-    });
-    return;
-  }
-
   const apiKey = process.env["GEMINI_API_KEY"]?.trim();
   if (!apiKey) {
     res.status(503).json({
@@ -101,23 +94,42 @@ router.post("/plants/identify", async (req, res): Promise<void> => {
   }
 
   try {
-    const result = await identifyPlantWithGemini(input, apiKey);
+    const clientKey = getClientKey(req);
+    const result = await identifyCached(input, clientKey, apiKey, async () => {
+      const retryAfter = takeRateLimitToken(clientKey, Date.now());
+      if (retryAfter !== null) {
+        throw new GeminiServiceError(
+          "Too many identification attempts. Please wait a few minutes and try again.",
+          429, false, retryAfter * 1000,
+        );
+      }
+      return identifyPlantWithGemini(input, apiKey);
+    });
     res.json(IdentifyPlantResponse.parse(result));
   } catch (error) {
     const message =
-      error instanceof Error
+      error instanceof GeminiServiceError
         ? error.message
         : "Plant identification is temporarily unavailable. Please try again.";
     req.log.error(
       {
-        err: error,
+        // Log safe classifications, not raw fetch errors or request images.
         ...(error instanceof GeminiServiceError
           ? { upstreamStatus: error.upstreamStatus }
           : {}),
       },
       "Plant identification request failed",
     );
-    res.status(503).json({ error: message });
+    const status = error instanceof GeminiServiceError
+      ? error.upstreamStatus === 429 ? 429
+        : error.upstreamStatus === 400 ? 400
+          : error.upstreamStatus === 504 ? 504
+            : error.upstreamStatus === 502 ? 502 : 503
+      : 503;
+    if (status === 429 && error instanceof GeminiServiceError) {
+      res.setHeader("Retry-After", String(Math.max(1, Math.ceil(error.retryAfterMs / 1000))));
+    }
+    res.status(status).json({ error: message });
   }
 });
 

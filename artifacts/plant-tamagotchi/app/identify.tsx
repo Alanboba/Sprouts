@@ -9,7 +9,7 @@ import { useColors } from '@/hooks/useColors';
 import { usePlantPhoto } from '@/hooks/usePlantPhoto';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -53,6 +53,20 @@ export default function IdentifyPlantScreen() {
   const [isSavingIdentity, setIsSavingIdentity] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const scientificInputRef = useRef<TextInput>(null);
+  const activeRequest = useRef<AbortController | null>(null);
+  const lastAnalysis = useRef<{ photo: string; result: PlantIdentificationResult; expiresAt: number } | null>(null);
+
+  useEffect(() => {
+    setResult(null);
+    setCommonName('');
+    setScientificName('');
+    setError(null);
+    setIsIdentifying(false);
+    return () => {
+      activeRequest.current?.abort();
+      activeRequest.current = null;
+    };
+  }, [photoUri]);
 
   const styles = StyleSheet.create({
     page: { flex: 1, backgroundColor: colors.background },
@@ -169,6 +183,8 @@ export default function IdentifyPlantScreen() {
   };
 
   const handleIdentify = async () => {
+    // State updates are asynchronous; the ref also prevents rapid double taps.
+    if (activeRequest.current || isSaving || photoLoading) return;
     if (!photoUri) {
       setError('Take a photo or choose one from your library first.');
       return;
@@ -180,25 +196,48 @@ export default function IdentifyPlantScreen() {
     }
 
     setError(null);
+    const applyResult = (identification: PlantIdentificationResult) => {
+      setResult(identification);
+      setCommonName(identification.status === 'identified' ? identification.commonName : '');
+      setScientificName(identification.status === 'identified' ? identification.scientificName : '');
+    };
+    if (lastAnalysis.current?.photo === photoUri && lastAnalysis.current.expiresAt > Date.now()) {
+      applyResult(lastAnalysis.current.result);
+      return;
+    }
+    const controller = new AbortController();
+    activeRequest.current = controller;
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, 32_000);
     setResult(null);
     setIsIdentifying(true);
     try {
       const identification = await identifyPlant({
         mimeType: match[1] as 'image/jpeg' | 'image/png' | 'image/webp',
         imageBase64: match[2],
-      });
-      setResult(identification);
-      if (identification.status === 'identified') {
-        setCommonName(identification.commonName);
-        setScientificName(identification.scientificName);
-      } else {
-        setCommonName('');
-        setScientificName('');
-      }
+      }, { signal: controller.signal });
+      if (activeRequest.current !== controller) return;
+      lastAnalysis.current = {
+        photo: photoUri,
+        result: identification,
+        expiresAt: Date.now() + (identification.status === 'identified' ? 10 * 60_000 : 30_000),
+      };
+      applyResult(identification);
     } catch (requestError) {
-      setError(getApiErrorMessage(requestError));
+      if (activeRequest.current === controller) {
+        setError(timedOut
+          ? 'Plant identification took too long. Check your connection and try again.'
+          : getApiErrorMessage(requestError));
+      }
     } finally {
-      setIsIdentifying(false);
+      clearTimeout(timeout);
+      if (activeRequest.current === controller) {
+        activeRequest.current = null;
+        setIsIdentifying(false);
+      }
     }
   };
 
@@ -385,7 +424,7 @@ export default function IdentifyPlantScreen() {
                     : 'Enter the name yourself'}
                 </Text>
                 <Text style={styles.resultText}>
-                  Review the names before saving them to Milo’s plant profile.
+                  Review the names before saving them to {identity?.nickname || identity?.commonName || 'your plant'}’s profile.
                 </Text>
                 <Text style={styles.inputLabel}>Common name</Text>
                 <TextInput

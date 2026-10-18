@@ -4,7 +4,9 @@ import {
   type PlantIdentificationResult,
 } from "@workspace/api-zod";
 
-const GEMINI_MODEL = "gemini-3.8-flash";
+// Flash 3.8 authenticated successfully but repeatedly hung on generateContent.
+// Use the vision-capable low-latency model verified against the current API.
+const GEMINI_MODEL = "gemini-3.5-flash-lite";
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 const CONFIDENCE_THRESHOLD = 0.7;
 
@@ -12,6 +14,8 @@ export class GeminiServiceError extends Error {
   constructor(
     message: string,
     readonly upstreamStatus: number,
+    readonly retryable = false,
+    readonly retryAfterMs = 600,
   ) {
     super(message);
     this.name = "GeminiServiceError";
@@ -87,8 +91,8 @@ export function normalizeGeminiIdentification(
   const commonName = cleanName(result.commonName, 100);
   const scientificName = cleanName(result.scientificName, 120);
   if (
-    confidence === null ||
-    confidence < CONFIDENCE_THRESHOLD ||
+    (confidence !== null && confidence < CONFIDENCE_THRESHOLD) ||
+    (result.confidence != null && confidence === null) ||
     !commonName ||
     !scientificName
   ) {
@@ -114,11 +118,12 @@ function extractCandidateText(payload: unknown): string | null {
   if (!Array.isArray(parts)) return null;
   const text = parts
     .map((part) =>
-      typeof part === "object" && part !== null && "text" in part
+      typeof part === "object" && part !== null && part.thought !== true && "text" in part
         ? (part as { text?: unknown }).text
         : null,
     )
-    .find((part): part is string => typeof part === "string");
+    .filter((part): part is string => typeof part === "string")
+    .join("");
   return text ?? null;
 }
 
@@ -126,14 +131,20 @@ export async function identifyPlantWithGemini(
   input: PlantIdentificationInput,
   apiKey: string,
   fetcher: typeof fetch = fetch,
+  options: {
+    attemptTimeoutMs?: number;
+    sleep?: (ms: number) => Promise<void>;
+  } = {},
 ): Promise<PlantIdentificationResult> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30_000);
-
-  try {
-    let response: Response;
+  const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  // Two bounded attempts, including reading the body. Never retry permanent
+  // authentication, model, input or malformed-output errors.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), options.attemptTimeoutMs ?? 12_000);
+    let failure: GeminiServiceError;
     try {
-      response = await fetcher(GEMINI_URL, {
+      const response = await fetcher(GEMINI_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -163,6 +174,7 @@ export async function identifyPlantWithGemini(
             },
           ],
           generationConfig: {
+            maxOutputTokens: 1024,
             responseMimeType: "application/json",
             responseSchema: {
               type: "OBJECT",
@@ -180,46 +192,64 @@ export async function identifyPlantWithGemini(
           },
         }),
       });
+      if (!response.ok) {
+        // Never forward Google's raw error (which can contain request details
+        // or credentials). Read it only to classify exhausted quota.
+        const payload = await response.json().catch(() => null) as {
+          error?: { details?: unknown };
+        } | null;
+        const details = payload?.error?.details;
+        const exhaustedQuota = Array.isArray(details) && details.some((detail) =>
+          Array.isArray(detail?.violations) && detail.violations.some((violation: { quotaId?: string; quotaValue?: string } | null) =>
+            /perday/i.test(violation?.quotaId ?? "") || violation?.quotaValue === "0"));
+        const retryHeader = response.headers.get("retry-after");
+        const retryMs = retryHeader
+          ? /^\d+(\.\d+)?$/.test(retryHeader)
+            ? Number(retryHeader) * 1000
+            : Math.max(0, Date.parse(retryHeader) - Date.now())
+          : 600;
+        const transient = [429, 500, 502, 503, 504].includes(response.status);
+        const message = response.status === 429
+          ? "Gemini's rate limit or quota was reached. Wait a while before trying again."
+          : [401, 403].includes(response.status)
+            ? "Gemini rejected the server credentials or access permissions. The app owner needs to check the server configuration."
+            : response.status === 404
+              ? "The configured Gemini model is unavailable. The app owner needs to check the server configuration."
+              : response.status === 400
+                ? "Gemini could not read this image. Choose another plant photo."
+                : "Gemini is temporarily unavailable. Please try again shortly.";
+        throw new GeminiServiceError(
+          message, response.status,
+          transient && !exhaustedQuota && Number.isFinite(retryMs) && retryMs <= 2_000,
+          Math.max(600, retryMs || 600),
+        );
+      }
+      const payload: unknown = await response.json();
+      const text = extractCandidateText(payload);
+      if (!text) {
+        throw new GeminiServiceError("Gemini returned no analysis. Please choose another photo or try again.", 502);
+      }
+      let modelResult: unknown;
+      try {
+        modelResult = JSON.parse(text);
+      } catch {
+        throw new GeminiServiceError("Gemini returned an incomplete analysis. Please try again.", 502);
+      }
+      return normalizeGeminiIdentification(modelResult);
     } catch (error) {
-      throw new Error(
-        error instanceof Error && error.name === "AbortError"
-          ? "Plant identification timed out. Try again with a smaller photo."
-          : "Gemini is temporarily unavailable. Please try again.",
-      );
+      failure = error instanceof GeminiServiceError
+        ? error
+        : controller.signal.aborted
+          ? new GeminiServiceError("Plant identification timed out. Please try again shortly.", 504, true)
+          : error instanceof SyntaxError
+            ? new GeminiServiceError("Gemini returned an unreadable analysis. Please try again.", 502)
+            : new GeminiServiceError("Could not connect to Gemini. Please try again shortly.", 503, true);
+    } finally {
+      clearTimeout(timeout);
     }
-
-    if (response.status === 429) {
-      throw new GeminiServiceError(
-        "Gemini is busy right now. Please try again in a moment.",
-        response.status,
-      );
-    }
-    if (!response.ok) {
-      throw new GeminiServiceError(
-        "Gemini could not analyze this photo. Please try again.",
-        response.status,
-      );
-    }
-
-    let payload: unknown;
-    try {
-      payload = await response.json();
-    } catch {
-      return uncertainResult();
-    }
-
-    const text = extractCandidateText(payload);
-    if (!text) return uncertainResult();
-
-    let modelResult: unknown;
-    try {
-      modelResult = JSON.parse(text);
-    } catch {
-      return uncertainResult();
-    }
-
-    return normalizeGeminiIdentification(modelResult);
-  } finally {
-    clearTimeout(timeout);
+    if (!failure.retryable || attempt === 1) throw failure;
+    await sleep(failure.retryAfterMs);
   }
+  // The bounded loop always returns or throws.
+  throw new GeminiServiceError("Plant identification is unavailable.", 503);
 }
