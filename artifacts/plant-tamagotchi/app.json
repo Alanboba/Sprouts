@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "sprout",
+    "name": "Sprout",
     "slug": "sprout",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -24,7 +24,11 @@
     },
     "android": {
       "usesCleartextTraffic": true,
-      "package": "com.sprout.app"
+      "package": "com.sprout.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon-foreground.png",
+        "backgroundColor": "#F2F5EF"
+      }
     },
     "web": {
       "favicon": "./assets/images/icon.png"

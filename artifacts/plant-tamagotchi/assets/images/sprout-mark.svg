@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <g stroke-linecap="round" stroke-linejoin="round">
+    <!-- Leaves -->
+    <path d="M503 433C429 411 316 345 296 247c111-6 204 53 222 186" fill="#446B55"/>
+    <path d="M521 433c74-22 187-88 207-186-111-6-204 53-222 186" fill="#355B45"/>
+    <path d="M507 411c-48-39-101-71-160-93M516 411c48-39 101-71 160-93" fill="none" stroke="#8CAF8D" stroke-width="13"/>
+    <!-- Stems -->
+    <path d="M512 431v150" fill="none" stroke="#446B55" stroke-width="34"/>
+    <!-- Soil and pot rim -->
+    <path d="M334 581h356c12 0 21 10 21 22v41H313v-41c0-12 9-22 21-22Z" fill="#B96E4C"/>
+    <path d="M350 603h324" fill="none" stroke="#8D4E38" stroke-width="13"/>
+    <!-- Pot -->
+    <path d="M326 644h372l-35 153c-4 17-19 29-37 29H398c-18 0-33-12-37-29l-35-153Z" fill="#C97B57"/>
+    <path d="M352 669h320" fill="none" stroke="#D99774" stroke-width="10"/>
+    <!-- Moisture drop -->
+    <path d="M512 687c-17 22-26 34-26 47a26 26 0 0 0 52 0c0-13-9-25-26-47Z" fill="#F2F5EF"/>
+  </g>
+</svg>
