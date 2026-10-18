@@ -3,7 +3,7 @@
 
 // Little-water plant animation converted from the supplied 24x24 GIF.
 constexpr int LITTLEWATER_FRAME_W = 24;
-constexpr int LITTLEWATER_FRAME_H = 24
+constexpr int LITTLEWATER_FRAME_H = 24;
 constexpr int LITTLEWATER_FRAME_COUNT = 2;
 
 const uint16_t plantLittleWaterFrames[LITTLEWATER_FRAME_COUNT][LITTLEWATER_FRAME_W * LITTLEWATER_FRAME_H] PROGMEM = {
